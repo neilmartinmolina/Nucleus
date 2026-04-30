@@ -77,7 +77,9 @@ CREATE TABLE folders (
 );
 
 -- Add folder_id column to websites table
+ALTER TABLE websites ADD COLUMN url VARCHAR(2048) NULL AFTER websiteName;
 ALTER TABLE websites ADD COLUMN folder_id INT NULL AFTER status;
+ALTER TABLE websites ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP AFTER updatedBy;
 ALTER TABLE websites ADD FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE SET NULL;
 
 -- Update existing users table to add email field for default users

@@ -31,9 +31,9 @@ class Security {
         return preg_match("/^[a-zA-Z0-9_]+$/", $username) && strlen($username) >= 3 && strlen($username) <= 50;
     }
 
-    // Validate version format (semantic versioning)
+    // Validate version format
     public static function validateVersion($version) {
-        return preg_match("/^v?\d+\.\d+\.\d+(-[a-zA-Z0-9]+)?$/", $version);
+        return preg_match("/^v?\d+\.\d+(\.\d+)?(-[a-zA-Z0-9]+)?$/", $version);
     }
 
     // Clean and sanitize input data (NOTE: This should only be used for output escaping, not input)

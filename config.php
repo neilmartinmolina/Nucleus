@@ -36,7 +36,7 @@ if (isLocal()) {
 
 // Application settings
 define("APP_ENV", isLocal() ? "local" : "production");
-define("APP_URL", isLocal() ? "http://localhost/CenterZone" : ($_ENV["APP_URL"] ?? ""));
+define("APP_URL", isLocal() ? "http://localhost/Nucleus" : ($_ENV["APP_URL"] ?? ""));
 define("SESSION_LIFETIME", 1800); // 30 minutes inactivity timeout
 
 require_once __DIR__ . "/includes/core.php";

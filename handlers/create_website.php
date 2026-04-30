@@ -10,7 +10,7 @@ if (!isAuthenticated()) {
 
 $data = json_decode(file_get_contents("php://input"), true);
 
-if (!isset($data["csrf_token"]) || !validateCSRF($data["csrf_token"])) {
+if (!isset($data["csrf_token"]) || !checkCSRF($data["csrf_token"], false)) {
     echo json_encode(["success" => false, "message" => "Invalid CSRF token"]);
     exit;
 }
@@ -31,7 +31,7 @@ if (empty($websiteName) || empty($url)) {
 }
 
 if (!Security::validateVersion($version)) {
-    echo json_encode(["success" => false, "message" => "Invalid version format. Use format like 1.0.0 or v1.0.0"]);
+    echo json_encode(["success" => false, "message" => "Invalid version format. Use format like 0.1, 1.0.0, or v1.0.0"]);
     exit;
 }
 

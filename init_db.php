@@ -41,9 +41,11 @@ if ($tableCheck->rowCount() == 0) {
     $pdo->exec("CREATE TABLE websites (
         websiteId INT PRIMARY KEY AUTO_INCREMENT,
         websiteName VARCHAR(255) NOT NULL,
+        url VARCHAR(2048) NULL,
         currentVersion VARCHAR(50),
         status ENUM('updated', 'updating', 'issue') DEFAULT 'updated',
         updatedBy INT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         lastUpdatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )");
     echo "Base tables created.\n";

@@ -10,7 +10,7 @@ if (!isAuthenticated()) {
 
 $data = json_decode(file_get_contents("php://input"), true);
 
-if (!isset($data["csrf_token"]) || !validateCSRF($data["csrf_token"])) {
+if (!isset($data["csrf_token"]) || !checkCSRF($data["csrf_token"], false)) {
     echo json_encode(["success" => false, "message" => "Invalid CSRF token"]);
     exit;
 }
