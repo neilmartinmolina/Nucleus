@@ -69,7 +69,7 @@ $updatedToday = count($today);
   <td class="py-3 pl-4 pr-4 font-medium text-slate-800"><?php echo htmlspecialchars($r["websiteName"]); ?></td>
   <td class="py-3 pr-4"><span class="px-2 py-1 rounded bg-blue-50 text-blue-700 text-sm font-medium"><?php echo htmlspecialchars($r["currentVersion"]); ?></span></td>
   <td class="py-3 pr-4 text-slate-600"><?php echo htmlspecialchars(displayUpdatedBy($r)); ?></td>
-  <td class="py-3 pr-4 text-slate-500 text-sm"><?php echo $r["lastUpdatedAt"]; ?></td>
+  <td class="py-3 pr-4 text-slate-500 text-sm"><?php echo htmlspecialchars(formatNucleusDateTime($r["lastUpdatedAt"])); ?></td>
 </tr>
 <?php endforeach; ?>
 </tbody>

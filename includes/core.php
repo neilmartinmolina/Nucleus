@@ -99,6 +99,25 @@ function displayUpdatedBy(array $row) {
         ?? "Unknown";
 }
 
+function formatNucleusDateTime($datetime) {
+    if (empty($datetime)) {
+        return "Never";
+    }
+
+    try {
+        $date = new DateTime((string) $datetime);
+        $today = new DateTime("today");
+    } catch (Exception $e) {
+        return (string) $datetime;
+    }
+
+    if ($date->format("Y-m-d") === $today->format("Y-m-d")) {
+        return $date->format("g:i A");
+    }
+
+    return $date->format("Y-m-d");
+}
+
 // Redirect to login if not authenticated (only for protected pages via index.php routing)
 $currentFile = basename($_SERVER["PHP_SELF"]);
 $isIndexPhp = ($currentFile === "index.php");

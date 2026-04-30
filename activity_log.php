@@ -49,7 +49,7 @@ $logs = $pdo->query("
           <td class="py-4 pr-4"><span class="px-2 py-1 rounded bg-blue-50 text-blue-700 text-sm font-medium"><?php echo htmlspecialchars($log["version"]); ?></span></td>
           <td class="py-4 pr-4 text-sm text-slate-600"><?php echo htmlspecialchars($log["updatedByDisplay"] ?? "Unknown"); ?></td>
           <td class="py-4 pr-4 text-sm text-slate-600"><?php echo htmlspecialchars($log["note"] ?? ""); ?></td>
-          <td class="py-4 pr-4 text-sm text-slate-500"><?php echo $log["created_at"]; ?></td>
+          <td class="py-4 pr-4 text-sm text-slate-500"><?php echo htmlspecialchars(formatNucleusDateTime($log["created_at"])); ?></td>
         </tr>
         <?php endforeach; ?>
       </tbody>

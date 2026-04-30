@@ -80,7 +80,7 @@ $folders = $pdo->query("SELECT * FROM folders ORDER BY name ASC")->fetchAll();
           <td class="py-4 pr-4"><span class="px-2 py-1 rounded bg-blue-50 text-blue-700 text-sm font-medium"><?php echo htmlspecialchars($w["currentVersion"]); ?></span></td>
           <td class="py-4 pr-4"><span class="px-2 py-1 rounded text-sm font-medium badge-<?php echo htmlspecialchars($w["status"]); ?>"><?php echo ucfirst(htmlspecialchars($w["status"])); ?></span></td>
           <td class="py-4 pr-4 text-sm text-slate-600"><?php echo htmlspecialchars(displayUpdatedBy($w)); ?></td>
-          <td class="py-4 pr-4 text-sm text-slate-500"><?php echo $w["lastUpdatedAt"]; ?></td>
+          <td class="py-4 pr-4 text-sm text-slate-500"><?php echo htmlspecialchars(formatNucleusDateTime($w["lastUpdatedAt"])); ?></td>
           <td class="py-4 pr-6">
             <div class="flex items-center gap-2">
               <a href="dashboard.php?page=project-form&websiteId=<?php echo $w['websiteId']; ?>" class="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm transition-colors">Edit</a>

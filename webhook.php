@@ -92,39 +92,38 @@ function updateWebsiteStatus(PDO $pdo, int $websiteId, string $status, ?string $
 {
     $hasLastCommit = columnExists($pdo, "websites", "last_commit");
     $hasGithubUpdatedBy = columnExists($pdo, "websites", "github_updated_by");
+    $hasGithubUpdatedByEmail = columnExists($pdo, "websites", "github_updated_by_email");
+    $hasGithubUpdatedByUsername = columnExists($pdo, "websites", "github_updated_by_username");
     $systemUserId = getSystemUserId($pdo);
 
-    if ($hasGithubUpdatedBy) {
-        $githubName = $githubUser["name"] ?? null;
-        $githubEmail = $githubUser["email"] ?? null;
-        $githubUsername = $githubUser["username"] ?? null;
+    $setParts = ["status = ?", "lastUpdatedAt = NOW()", "updatedBy = ?"];
+    $params = [$status, $systemUserId];
 
-        if ($hasLastCommit && $lastCommit !== null) {
-            $stmt = $pdo->prepare("
-                UPDATE websites
-                SET last_commit = ?, status = ?, github_updated_by = ?, github_updated_by_email = ?,
-                    github_updated_by_username = ?, lastUpdatedAt = NOW(), updatedBy = ?
-                WHERE websiteId = ?
-            ");
-            $stmt->execute([$lastCommit, $status, $githubName, $githubEmail, $githubUsername, $systemUserId, $websiteId]);
-        } else {
-            $stmt = $pdo->prepare("
-                UPDATE websites
-                SET status = ?, github_updated_by = ?, github_updated_by_email = ?,
-                    github_updated_by_username = ?, lastUpdatedAt = NOW(), updatedBy = ?
-                WHERE websiteId = ?
-            ");
-            $stmt->execute([$status, $githubName, $githubEmail, $githubUsername, $systemUserId, $websiteId]);
-        }
-    } elseif ($hasLastCommit && $lastCommit !== null) {
-        $stmt = $pdo->prepare("UPDATE websites SET last_commit = ?, status = ?, lastUpdatedAt = NOW(), updatedBy = ? WHERE websiteId = ?");
-        $stmt->execute([$lastCommit, $status, $systemUserId, $websiteId]);
-    } else {
-        $stmt = $pdo->prepare("UPDATE websites SET status = ?, lastUpdatedAt = NOW(), updatedBy = ? WHERE websiteId = ?");
-        $stmt->execute([$status, $systemUserId, $websiteId]);
+    if ($hasLastCommit && $lastCommit !== null) {
+        array_unshift($setParts, "last_commit = ?");
+        array_unshift($params, $lastCommit);
     }
 
-    if ($systemUserId !== null) {
+    if ($hasGithubUpdatedBy) {
+        $setParts[] = "github_updated_by = ?";
+        $params[] = $githubUser["name"] ?? null;
+    }
+
+    if ($hasGithubUpdatedByEmail) {
+        $setParts[] = "github_updated_by_email = ?";
+        $params[] = $githubUser["email"] ?? null;
+    }
+
+    if ($hasGithubUpdatedByUsername) {
+        $setParts[] = "github_updated_by_username = ?";
+        $params[] = $githubUser["username"] ?? null;
+    }
+
+    $params[] = $websiteId;
+    $stmt = $pdo->prepare("UPDATE websites SET " . implode(", ", $setParts) . " WHERE websiteId = ?");
+    $stmt->execute($params);
+
+    if ($systemUserId !== null && columnExists($pdo, "updateLogs", "updatedBy")) {
         $version = $lastCommit ? substr($lastCommit, 0, 12) : "webhook";
         $stmt = $pdo->prepare("INSERT INTO updateLogs (websiteId, version, note, updatedBy) VALUES (?, ?, ?, ?)");
         $stmt->execute([$websiteId, $version, $note, $systemUserId]);
@@ -265,6 +264,18 @@ try {
         "output" => $pullOutput,
     ]);
 } catch (Throwable $e) {
-    error_log("Webhook error: " . $e->getMessage());
-    respond(500, ["success" => false, "message" => "Webhook processing failed"]);
+    $diagnosticId = bin2hex(random_bytes(6));
+    error_log("Webhook error {$diagnosticId}: " . $e->getMessage());
+
+    $payload = [
+        "success" => false,
+        "message" => "Webhook processing failed",
+        "diagnostic_id" => $diagnosticId,
+    ];
+
+    if (APP_ENV !== "production" || ($_ENV["WEBHOOK_DEBUG"] ?? "") === "1") {
+        $payload["error"] = $e->getMessage();
+    }
+
+    respond(500, $payload);
 }

@@ -49,12 +49,7 @@ function computeStatus($lastUpdatedAt) {
 }
 
 function timeAgo($datetime) {
-    if (!$datetime) return "Never";
-    $diff = (new DateTime())->diff(new DateTime($datetime));
-    if ($diff->d == 0 && $diff->h == 0) return "Just now";
-    if ($diff->d == 0) return $diff->h . "h ago";
-    if ($diff->d == 1) return "Yesterday";
-    return $diff->d . "d ago";
+    return formatNucleusDateTime($datetime);
 }
 
 $isEmbedded = basename($_SERVER["PHP_SELF"]) === "get_content.php";
