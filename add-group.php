@@ -44,7 +44,7 @@ try {
     $stmt = $pdo->prepare("INSERT INTO folders (name, description, created_by) VALUES (?, ?, ?)");
     $stmt->execute([$groupName, $description, $_SESSION["userId"]]);
     
-    echo SweetAlert::success("Success", "Folder created successfully", "folders.php");
+    echo SweetAlert::success("Success", "Folder created successfully", "dashboard.php?page=folders");
     exit;
     
 } catch (Exception $e) {

@@ -16,8 +16,11 @@ switch ($tab) {
     case "websites":
         require_once __DIR__ . "/websites_content.php";
         break;
-    case "folders":
-        require_once __DIR__ . "/folders_content.php";
+     case "folders":
+         require_once __DIR__ . "/folders_content.php";
+         break;
+    case "view-folder":
+        require_once __DIR__ . "/view-folder.php";
         break;
     case "usermanagement":
         require_once __DIR__ . "/usermanagement_content.php";

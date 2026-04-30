@@ -44,6 +44,18 @@ CREATE TABLE error_logs (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Create update logs table (tracks website version changes and manual updates)
+CREATE TABLE updateLogs (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    websiteId INT NOT NULL,
+    version VARCHAR(50) NOT NULL,
+    note TEXT,
+    updatedBy INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (websiteId) REFERENCES websites(websiteId) ON DELETE CASCADE,
+    FOREIGN KEY (updatedBy) REFERENCES users(userId) ON DELETE CASCADE
+);
+
 -- Create user permissions table
 CREATE TABLE user_permissions (
     permissionId INT PRIMARY KEY AUTO_INCREMENT,

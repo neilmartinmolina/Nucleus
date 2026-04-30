@@ -2,7 +2,7 @@
 require_once __DIR__ . "/includes/core.php";
 
 if (!isAuthenticated()) {
-    header("Location: index.php?tab=login");
+    header("Location: login.php");
     exit;
 }
 
@@ -22,7 +22,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["csrf_token"])) {
         try {
             $stmt = $pdo->prepare("INSERT INTO websites (websiteName, url, currentVersion, status, folder_id, updatedBy, created_at, lastUpdatedAt) VALUES (?, ?, ?, \"updated\", ?, ?, NOW(), NOW())");
             $stmt->execute([$websiteName, $url, $version, $folderId, $_SESSION["userId"]]);
-            header("Location: index.php?tab=websites");
+            header("Location: dashboard.php?page=websites");
             exit;
         } catch (Exception $e) {
             $error = "Failed to create website: " . $e->getMessage();
@@ -33,7 +33,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["csrf_token"])) {
 if (isset($_GET["delete"]) && hasPermission("delete_project")) {
     $id = $_GET["delete"];
     $pdo->prepare("DELETE FROM websites WHERE websiteId = ?")->execute([$id]);
-    header("Location: index.php?tab=websites");
+    header("Location: dashboard.php?page=websites");
     exit;
 }
 
@@ -56,7 +56,7 @@ $folders = $pdo->query("SELECT * FROM folders ORDER BY name ASC")->fetchAll();
 
 <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
   <div class="overflow-x-auto">
-    <table class="data-table w-full">
+    <table class="data-table w-full" data-page-length="10" data-order-column="5" data-order-direction="desc" data-empty="No websites found">
       <thead class="bg-slate-50">
         <tr class="text-left text-sm text-slate-600 border-b border-slate-200">
           <th class="pb-3 pl-6 pr-4 font-semibold">Website</th>
@@ -65,7 +65,7 @@ $folders = $pdo->query("SELECT * FROM folders ORDER BY name ASC")->fetchAll();
           <th class="pb-3 pr-4 font-semibold">Status</th>
           <th class="pb-3 pr-4 font-semibold">Updated By</th>
           <th class="pb-3 pr-4 font-semibold">Updated At</th>
-          <th class="pb-3 pr-6 font-semibold">Actions</th>
+          <th class="no-sort pb-3 pr-6 font-semibold">Actions</th>
         </tr>
       </thead>
       <tbody class="divide-y divide-slate-100">
@@ -81,7 +81,7 @@ $folders = $pdo->query("SELECT * FROM folders ORDER BY name ASC")->fetchAll();
             <div class="flex items-center gap-2">
               <button onclick="document.getElementById('updateModal').classList.remove('hidden'); document.getElementById('upWebsiteId').value=<?php echo $w['websiteId']; ?>; document.getElementById('upVersion').value='<?php echo htmlspecialchars($w['currentVersion']); ?>'; document.getElementById('upStatus').value='<?php echo htmlspecialchars($w['status']); ?>'; document.getElementById('upFolderId').value='<?php echo $w['folder_id'] ?? ''; ?>';" class="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm transition-colors">Edit</button>
               <?php if (hasPermission("delete_project")): ?>
-              <a href="index.php?tab=websites&delete=<?php echo $w['websiteId']; ?>" onclick="return confirm('Delete this website?')" class="px-3 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 text-sm transition-colors">Delete</a>
+               <a href="dashboard.php?page=websites&delete=<?php echo $w['websiteId']; ?>" onclick="return confirm('Delete this website?')" class="px-3 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 text-sm transition-colors">Delete</a>
               <?php endif; ?>
             </div>
           </td>
@@ -173,3 +173,10 @@ $folders = $pdo->query("SELECT * FROM folders ORDER BY name ASC")->fetchAll();
     </div>
   </div>
 </div>
+
+<!-- Badge CSS -->
+<style>
+.badge-updated { background:#d1fae5; color:#065f46; }
+.badge-updating { background:#fef3c7; color:#92400e; }
+.badge-issue { background:#fee2e2; color:#991b1b; }
+</style>

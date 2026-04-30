@@ -50,7 +50,7 @@ try {
     
     $pdo->commit();
     
-    echo SweetAlert::success("Success", "Folder deleted successfully", "folders.php");
+    echo SweetAlert::success("Success", "Folder deleted successfully", "dashboard.php?page=folders");
     exit;
     
 } catch (Exception $e) {

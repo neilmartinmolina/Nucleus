@@ -56,7 +56,7 @@ $updatedToday = count($today);
     <p class="text-sm text-slate-500 mt-1">Websites updated today</p>
   </div>
   <div class="overflow-x-auto">
-    <table class="data-table w-full">
+    <table class="data-table w-full" data-page-length="5" data-order-column="3" data-order-direction="desc" data-empty="No websites updated today">
       <thead><tr class="text-left text-sm text-slate-600 border-b border-slate-100">
         <th class="pb-3 pl-4 pr-4 font-semibold">Website</th>
         <th class="pb-3 pr-4 font-semibold">Version</th>
@@ -72,9 +72,6 @@ $updatedToday = count($today);
   <td class="py-3 pr-4 text-slate-500 text-sm"><?php echo $r["lastUpdatedAt"]; ?></td>
 </tr>
 <?php endforeach; ?>
-<?php if (count($today) == 0): ?>
-<tr><td colspan="4" class="py-8 text-center text-slate-500">No websites updated today</td></tr>
-<?php endif; ?>
 </tbody>
     </table>
   </div>
@@ -84,15 +81,15 @@ $updatedToday = count($today);
   <div class="p-6 border-b border-slate-100 flex items-center justify-between">
     <div><h3 class="text-lg font-semibold text-slate-800">All Websites</h3>
     <p class="text-sm text-slate-500 mt-1">Manage all website projects</p></div>
-    <a href="index.php?tab=websites" class="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-800 transition-colors">View All</a>
+    <a href="dashboard.php?page=websites" class="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-800 transition-colors">View All</a>
   </div>
   <div class="overflow-x-auto">
-    <table class="data-table w-full" data-scroll-y="300px">
+    <table class="data-table w-full" data-scroll-y="300px" data-page-length="10" data-order-column="0" data-order-direction="asc" data-empty="No website projects found">
       <thead><tr class="text-left text-sm text-slate-600 border-b border-slate-100">
         <th class="pb-3 pl-4 pr-4 font-semibold">Website</th>
         <th class="pb-3 pr-4 font-semibold">Status</th>
         <th class="pb-3 pr-4 font-semibold">Version</th>
-        <th class="pb-3 pr-4 font-semibold">Action</th>
+        <th class="no-sort pb-3 pr-4 font-semibold">Action</th>
       </tr></thead>
       <tbody>
 <?php foreach($all as $r): ?>
@@ -100,10 +97,16 @@ $updatedToday = count($today);
   <td class="py-3 pl-4 pr-4 font-medium text-slate-800"><?php echo htmlspecialchars($r["websiteName"]); ?></td>
   <td class="py-3 pr-4"><span class="px-2 py-1 rounded text-sm font-medium badge-<?php echo htmlspecialchars($r["status"]); ?>"><?php echo ucfirst(htmlspecialchars($r["status"])); ?></span></td>
   <td class="py-3 pr-4"><?php echo htmlspecialchars($r["currentVersion"]); ?></td>
-  <td class="py-3 pr-4"><button class="status-select px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm transition-colors border border-slate-200 cursor-pointer" data-website-id="<?php echo $r["websiteId"]; ?>">Update</button></td>
+   <td class="py-3 pr-4"><button class="status-select px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm transition-colors border border-slate-200 cursor-pointer" data-website-id="<?php echo $r["websiteId"]; ?>">Update</button></td>
 </tr>
 <?php endforeach; ?>
 </tbody>
     </table>
   </div>
 </div>
+
+<style>
+.badge-updated { background:#d1fae5; color:#065f46; }
+.badge-updating { background:#fef3c7; color:#92400e; }
+.badge-issue { background:#fee2e2; color:#991b1b; }
+</style>

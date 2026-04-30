@@ -2,7 +2,7 @@
 require_once __DIR__ . "/includes/core.php";
 
 if (!isAuthenticated() || !hasPermission("manage_users")) {
-    header("Location: index.php?tab=dashboard");
+    header("Location: dashboard.php?page=dashboard");
     exit;
 }
 
@@ -62,7 +62,7 @@ $allPermissions = ["create_project", "update_project", "delete_project", "manage
     <h1 class="text-2xl font-bold text-slate-800">User Management</h1>
     <p class="text-sm text-slate-500">Manage system users</p>
   </div>
-  <a href="index.php?tab=dashboard" class="text-slate-600 hover:text-slate-900 transition-colors text-sm font-medium">Back to Dashboard</a>
+  <a href="dashboard.php?page=dashboard" class="text-slate-600 hover:text-slate-900 transition-colors text-sm font-medium">Back to Dashboard</a>
 </div>
 
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -72,14 +72,14 @@ $allPermissions = ["create_project", "update_project", "delete_project", "manage
         <h3 class="text-lg font-semibold text-slate-800">Existing Users</h3>
       </div>
       <div class="overflow-x-auto">
-        <table class="data-table w-full">
+        <table class="data-table w-full" data-page-length="10" data-order-column="0" data-order-direction="asc" data-empty="No users found">
           <thead class="bg-slate-50">
             <tr class="text-left text-sm text-slate-600 border-b border-slate-200">
               <th class="pb-3 pl-6 pr-4 font-semibold">Username</th>
               <th class="pb-3 pr-4 font-semibold">Full Name</th>
               <th class="pb-3 pr-4 font-semibold">Role</th>
               <th class="pb-3 pr-4 font-semibold">Perms</th>
-              <th class="pb-3 pr-6 font-semibold">Actions</th>
+              <th class="no-sort pb-3 pr-6 font-semibold">Actions</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100">
@@ -134,3 +134,15 @@ $allPermissions = ["create_project", "update_project", "delete_project", "manage
     </div>
   </div>
 </div>
+
+<!-- Badge CSS for status and role badges -->
+<style>
+/* Status badges */
+.badge-updated { background:#d1fae5; color:#065f46; }
+.badge-updating { background:#fef3c7; color:#92400e; }
+.badge-issue { background:#fee2e2; color:#991b1b; }
+/* Role badges */
+.badge-admin { background:#fee2e2; color:#991b1b; }
+.badge-handler { background:#fef3c7; color:#92400e; }
+.badge-visitor { background:#d1fae5; color:#065f46; }
+</style>

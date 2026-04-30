@@ -3,17 +3,9 @@ require_once __DIR__ . "/config.php";
 
 $isAuthenticated = isset($_SESSION["userId"]) && !empty($_SESSION["userId"]);
 
-// If trying to access login when already logged in, go to dashboard
-if ($isAuthenticated && basename($_SERVER["PHP_SELF"]) === "login.php") {
-    header("Location: index.php?tab=dashboard");
-    exit;
-}
-
-// If accessing protected pages without auth, redirect to login
-$protectedPages = ["dashboard.php", "users.php", "folders.php", "view-folder.php", "update.php", "add-group.php", "delete-folder.php", "password_reset.php", "password_reset_complete.php"];
-$currentFile = basename($_SERVER["PHP_SELF"]);
-if (!$isAuthenticated && in_array($currentFile, $protectedPages)) {
-    header("Location: login.php");
+// If already logged in, redirect to dashboard
+if ($isAuthenticated) {
+    header("Location: dashboard.php");
     exit;
 }
 ?>
@@ -50,22 +42,17 @@ if (!$isAuthenticated && in_array($currentFile, $protectedPages)) {
             <a href="#" class="hover:text-accent">Pricing</a>
         </div>
         <div class="space-x-4">
-            <?php if ($isAuthenticated): ?>
-                <a href="dashboard.php" class="bg-accent text-black px-6 py-2 rounded-lg font-medium">Dashboard</a>
-                <a href="logout.php" class="bg-cta px-6 py-2 rounded-lg font-medium">Logout</a>
-            <?php else: ?>
-                <button class="bg-accent text-black px-6 py-2 rounded-lg font-medium">Login</button>
-                <button class="bg-cta px-6 py-2 rounded-lg font-medium">Try Nucleus Free â†’</button>
-            <?php endif; ?>
+            <a href="login.php" class="bg-accent text-black px-6 py-2 rounded-lg font-medium">Login</a>
+            <button class="bg-cta px-6 py-2 rounded-lg font-medium">Try Nucleus Free →</button>
         </div>
     </nav>
 
-    <!-- Section 1: Hero -->
+    <!-- Hero -->
     <header class="bg-navy text-white px-12 py-20 flex items-center">
         <div class="w-1/2">
             <h1 class="text-6xl font-bold mb-6 leading-tight">Sync your workflow with every commit.</h1>
             <p class="text-lg opacity-80 mb-8">Automate your documentation updates via GitHub hooks or trigger a manual deployment with one click.</p>
-            <button class="bg-cta px-8 py-4 rounded-lg font-semibold flex items-center gap-2">Try Nucleus Free â†’</button>
+            <button class="bg-cta px-8 py-4 rounded-lg font-semibold flex items-center gap-2">Try Nucleus Free →</button>
         </div>
         <div class="w-1/2 flex justify-center">
             <div class="w-96 h-64 bg-blue-900/50 rounded-xl border border-blue-400/30 flex items-center justify-center">
@@ -74,19 +61,18 @@ if (!$isAuthenticated && in_array($currentFile, $protectedPages)) {
         </div>
     </header>
 
-    <!-- Section 2: Commit Tracking -->
+    <!-- Features -->
     <section class="px-12 py-24 flex items-center gap-16">
         <div class="w-1/2">
             <h2 class="text-5xl font-bold mb-6 underline decoration-accent decoration-4 underline-offset-8">Commit Tracking</h2>
             <p class="text-lg text-gray-600 mb-8">Nucleus parses your commit messages and automatically pushes changes to your live site, ensuring your documentation stays in lockstep with your codebase.</p>
-            <button class="bg-cta text-white px-8 py-4 rounded-lg font-semibold">Get Started â†’</button>
+            <button class="bg-cta text-white px-8 py-4 rounded-lg font-semibold">Get Started →</button>
         </div>
         <div class="w-1/2 bg-blue-100 h-80 rounded-2xl flex items-center justify-center">
             <span class="text-navy font-bold">Illustration Placeholder</span>
         </div>
     </section>
 
-    <!-- Section 3: Manual Toggle -->
     <section class="px-12 py-24 flex items-center gap-16 bg-gray-50">
         <div class="w-1/2 flex justify-center">
             <div class="w-64 h-64 border-2 border-dashed border-blue-400 rounded-full flex items-center justify-center">
@@ -96,7 +82,7 @@ if (!$isAuthenticated && in_array($currentFile, $protectedPages)) {
         <div class="w-1/2">
             <h2 class="text-5xl font-bold mb-6 underline decoration-accent decoration-4 underline-offset-8">Manual Toggle</h2>
             <p class="text-lg text-gray-600 mb-8">Not ready to automate? Use our manual "Website Updated!" dashboard toggle to verify changes before hitting production.</p>
-            <button class="bg-cta text-white px-8 py-4 rounded-lg font-semibold">Try it now â†’</button>
+            <button class="bg-cta text-white px-8 py-4 rounded-lg font-semibold">Try it now →</button>
         </div>
     </section>
 

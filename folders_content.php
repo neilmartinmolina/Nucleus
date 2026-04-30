@@ -2,7 +2,7 @@
 require_once __DIR__ . "/includes/core.php";
 
 if (!isAuthenticated()) {
-    header("Location: index.php?tab=login");
+    header("Location: login.php");
     exit;
 }
 
@@ -18,7 +18,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["csrf_token"])) {
         try {
             $stmt = $pdo->prepare("INSERT INTO folders (name, description, created_by) VALUES (?, ?, ?)");
             $stmt->execute([$folderName, $description, $_SESSION["userId"]]);
-            header("Location: index.php?tab=folders");
+            header("Location: dashboard.php?page=folders");
             exit;
         } catch (Exception $e) {
             $error = "Failed to create folder: " . $e->getMessage();
@@ -92,7 +92,7 @@ $folders = $pdo->query("SELECT f.*, u.fullName as createdByName, COUNT(w.website
           <span class="font-medium text-slate-800"><?php echo $f['projectCount']; ?></span>
           <span class="text-slate-500"> projects</span>
         </div>
-        <a href="index.php?tab=view-folder&folderId=<?php echo $f['id']; ?>" class="text-cta text-sm font-medium hover:text-cta-600 transition-colors">View Projects →</a>
+        <a href="view-folder.php?folderId=<?php echo $f['id']; ?>" class="text-cta text-sm font-medium hover:text-cta-600 transition-colors">View Projects →</a>
       </div>
       <div class="mt-3 pt-3 border-t border-slate-100">
         <div class="flex items-center gap-2 text-xs text-slate-400">

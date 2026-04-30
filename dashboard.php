@@ -1,186 +1,267 @@
 <?php
-require "includes/core.php";
+require_once __DIR__ . "/config.php";
 
-// Check if user is authenticated
+// If not authenticated, redirect to landing page
 if (!isAuthenticated()) {
-    header("Location: login.php");
+    header("Location: index.php");
     exit;
 }
 
-$todayQuery = "
-    SELECT w.*, u.fullName 
-    FROM websites w
-    LEFT JOIN users u ON w.updatedBy = u.userId
-    WHERE DATE(w.lastUpdatedAt) = CURDATE()
-    ORDER BY w.lastUpdatedAt DESC
-";
-$today = $pdo->query($todayQuery)->fetchAll();
-
-$all = $pdo->query("
-    SELECT w.*, u.fullName 
-    FROM websites w
-    LEFT JOIN users u ON w.updatedBy = u.userId
-    ORDER BY w.websiteName ASC
-")->fetchAll();
-
-generateCSRFToken();
+// Get user info
+$userId = $_SESSION["userId"];
+$stmt = $pdo->prepare("SELECT * FROM users WHERE userId = ?");
+$stmt->execute([$userId]);
+$currentUser = $stmt->fetch();
 ?>
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nucleus | Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdn.datatables.net/2.3.8/css/dataTables.tailwindcss.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        navy: '#043873',
+                        accent: '#FFE492',
+                        cta: '#4F9CF9'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .nav-item.active {
+            background-color: rgba(4, 56, 115, 0.1);
+            color: #043873;
+            font-weight: 600;
+        }
+        .nav-item.active::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background-color: #043873;
+            border-radius: 0 4px 4px 0;
+        }
+        .dt-container .dt-search input,
+        .dt-container .dt-length select {
+            border: 1px solid #e2e8f0;
+            border-radius: 0.5rem;
+            color: #334155;
+            font-size: 0.875rem;
+            outline: none;
+        }
+        .dt-container .dt-search input:focus,
+        .dt-container .dt-length select:focus {
+            border-color: #4F9CF9;
+            box-shadow: 0 0 0 2px rgba(79, 156, 249, 0.2);
+        }
+        .dt-container .dt-paging .dt-paging-button.current {
+            background: #043873 !important;
+            border-color: #043873 !important;
+            color: #ffffff !important;
+        }
+        .dt-container .dt-paging .dt-paging-button:hover {
+            background: #f1f5f9 !important;
+            border-color: #e2e8f0 !important;
+            color: #043873 !important;
+        }
+    </style>
 </head>
+<body class="bg-slate-50 text-slate-800 font-sans">
 
-<body>
+    <div class="flex h-screen overflow-hidden">
 
-<div class="container mt-4">
+        <!-- Sidebar -->
+        <aside class="w-64 bg-white border-r border-slate-200 flex flex-col">
+            <!-- Logo -->
+            <div class="h-16 flex items-center px-6 border-b border-slate-200">
+                <div class="text-xl font-bold tracking-tight text-navy">NUCLEUS</div>
+            </div>
 
-    <h4>Dashboard</h4>
+            <!-- Nav Links -->
+            <nav class="flex-1 py-6 px-3 space-y-1">
+                <a href="?page=dashboard" class="nav-item active block px-4 py-3 rounded-lg text-slate-600 hover:bg-slate-50 hover:text-navy transition relative" data-page="dashboard">
+                    <svg class="w-5 h-5 inline-block mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>
+                    Dashboard
+                </a>
+                <a href="?page=websites" class="nav-item block px-4 py-3 rounded-lg text-slate-600 hover:bg-slate-50 hover:text-navy transition relative" data-page="websites">
+                    <svg class="w-5 h-5 inline-block mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"></path></svg>
+                    Websites
+                </a>
+                <a href="?page=folders" class="nav-item block px-4 py-3 rounded-lg text-slate-600 hover:bg-slate-50 hover:text-navy transition relative" data-page="folders">
+                    <svg class="w-5 h-5 inline-block mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>
+                    Folders
+                </a>
+                <?php if (hasPermission("manage_users")): ?>
+                <a href="?page=usermanagement" class="nav-item block px-4 py-3 rounded-lg text-slate-600 hover:bg-slate-50 hover:text-navy transition relative" data-page="usermanagement">
+                    <svg class="w-5 h-5 inline-block mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                    Users
+                </a>
+                <?php endif; ?>
+            </nav>
 
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <div>
-            <a href="folders.php" class="btn btn-success mb-3">View Folders</a>
-        </div>
-        <div>
-            <a href="logout.php" class="btn btn-danger btn-sm">Logout</a>
+            <!-- User mini profile -->
+            <div class="p-4 border-t border-slate-200">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-full bg-navy text-white flex items-center justify-center text-sm font-semibold">
+                        <?php echo strtoupper(substr($currentUser['fullName'] ?? 'U', 0, 1)); ?>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <p class="text-sm font-medium text-slate-800 truncate"><?php echo htmlspecialchars($currentUser['fullName'] ?? 'User'); ?></p>
+                        <p class="text-xs text-slate-500 truncate"><?php echo htmlspecialchars($currentUser['role'] ?? 'user'); ?></p>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <div class="flex-1 flex flex-col overflow-hidden">
+
+            <!-- Top Navbar -->
+            <header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6">
+                <h1 class="text-xl font-bold text-navy" id="pageTitle">Dashboard</h1>
+                <div class="flex items-center gap-4">
+                    <a href="logout.php" class="px-4 py-2 text-sm font-medium text-slate-600 hover:text-navy transition">Logout</a>
+                </div>
+            </header>
+
+            <!-- Page Content -->
+            <main class="flex-1 overflow-auto p-8" id="pageContent">
+                <!-- Content loaded via AJAX -->
+            </main>
+
         </div>
     </div>
 
-    <ul class="nav nav-tabs" id="tabs">
-        <li class="nav-item">
-            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#today">Today</button>
-        </li>
-        <li class="nav-item">
-            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#all">All Websites</button>
-        </li>
-    </ul>
+    <script src="https://cdn.datatables.net/2.3.8/js/dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/2.3.8/js/dataTables.tailwindcss.min.js"></script>
 
-    <div class="tab-content mt-3">
+    <!-- JavaScript for AJAX navigation -->
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const contentEl = document.getElementById('pageContent');
+        const titleEl = document.getElementById('pageTitle');
+        const navLinks = document.querySelectorAll('.nav-item');
 
-        <!-- TODAY TAB -->
-        <div class="tab-pane fade show active" id="today">
+        function initNucleusDataTables(scope = document) {
+            if (!window.DataTable) return;
 
-            <table class="table table-bordered">
-                <thead>
-                    <tr>
-                        <th>Website</th>
-                        <th>Version</th>
-                        <th>Updated By</th>
-                        <th>Time</th>
-                    </tr>
-                </thead>
-                <tbody>
+            scope.querySelectorAll('table.data-table').forEach(table => {
+                if (DataTable.isDataTable(table)) return;
 
-                    <?php foreach($today as $row): ?>
-                    <tr>
-                        <td><?= $row["websiteName"] ?></td>
-                        <td><?= $row["currentVersion"] ?></td>
-                        <td><?= $row["fullName"] ?></td>
-                        <td><?= $row["lastUpdatedAt"] ?></td>
-                    </tr>
-                    <?php endforeach; ?>
+                const options = {
+                    autoWidth: false,
+                    pageLength: Number(table.dataset.pageLength || 10),
+                    lengthMenu: [5, 10, 25, 50],
+                    order: table.dataset.orderColumn
+                        ? [[Number(table.dataset.orderColumn), table.dataset.orderDirection || 'asc']]
+                        : [],
+                    scrollX: true,
+                    language: {
+                        search: '',
+                        searchPlaceholder: 'Search records...',
+                        lengthMenu: 'Show _MENU_',
+                        emptyTable: table.dataset.empty || 'No records found',
+                        zeroRecords: 'No matching records found'
+                    }
+                };
 
-                </tbody>
-            </table>
+                if (table.dataset.scrollY) {
+                    options.scrollY = table.dataset.scrollY;
+                    options.scrollCollapse = true;
+                }
 
-        </div>
+                if (table.querySelector('th.no-sort')) {
+                    options.columnDefs = [{ targets: 'no-sort', orderable: false, searchable: false }];
+                }
 
-        <!-- ALL TAB -->
-        <div class="tab-pane fade" id="all">
+                new DataTable(table, options);
+            });
+        }
 
-            <table class="table table-bordered">
-                <thead>
-                    <tr>
-                        <th>Website</th>
-                        <th>Status</th>
-                        <th>Version</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody>
+        function loadPage(page, pushState = true) {
+            fetch('get_content.php?tab=' + page)
+                .then(res => res.text())
+                .then(html => {
+                    contentEl.innerHTML = html;
+                    initNucleusDataTables(contentEl);
+                    if (pushState) history.pushState({ page }, '', '?page=' + page);
+                    updateActiveNav(page);
+                    // Update page title
+                    const titles = { dashboard: 'Dashboard', websites: 'Websites', folders: 'Folders', usermanagement: 'User Management' };
+                    titleEl.textContent = titles[page] || 'Nucleus';
+                })
+                .catch(err => {
+                    contentEl.innerHTML = '<div class="p-8 text-red-600">Failed to load page.</div>';
+                    console.error(err);
+                });
+        }
 
-                    <?php foreach($all as $row): ?>
-                    <tr>
-                        <td><?= $row["websiteName"] ?></td>
-                        <td><?= $row["status"] ?></td>
-                        <td><?= $row["currentVersion"] ?></td>
-                        <td>
-                            <button class="btn btn-sm btn-primary updateBtn"
-                                data-id="<?= $row["websiteId"] ?>"
-                                data-name="<?= $row["websiteName"] ?>"
-                                data-bs-toggle="modal"
-                                data-bs-target="#updateModal">
-                                Update
-                            </button>
-                        </td>
-                    </tr>
-                    <?php endforeach; ?>
+        function updateActiveNav(page) {
+            navLinks.forEach(link => {
+                link.classList.remove('active');
+                if (link.dataset.page === page) link.classList.add('active');
+            });
+        }
 
-                </tbody>
-            </table>
+        // Initial load
+        const urlParams = new URLSearchParams(window.location.search);
+        const initialPage = urlParams.get('page') || 'dashboard';
+        loadPage(initialPage, false);
 
-        </div>
+        // Nav clicks
+        navLinks.forEach(link => {
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                loadPage(this.dataset.page);
+            });
+        });
 
-    </div>
-</div>
+        // Back/forward
+        window.addEventListener('popstate', function(e) {
+            const page = new URLSearchParams(window.location.search).get('page') || 'dashboard';
+            loadPage(page, false);
+        });
 
-<!-- UPDATE MODAL -->
-<div class="modal fade" id="updateModal">
-    <div class="modal-dialog">
-        <div class="modal-content">
+        // Global handler for status-select buttons (dashboard "Mark updated")
+        contentEl.addEventListener('click', async function(e) {
+            const btn = e.target.closest('.status-select');
+            if (!btn) return;
+            const websiteId = btn.dataset.websiteId;
+            if (!confirm('Mark this project as updated? Version will be incremented automatically.')) return;
 
-            <form method="POST" action="update.php">
-                <input type="hidden" name="csrf_token" value="<?= $_SESSION["csrf_token"] ?>">
-                
-                <div class="modal-header">
-                    <h5 class="modal-title">Update Website</h5>
-                </div>
+            try {
+                const response = await fetch('handlers/update_website.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        csrf_token: '<?php echo $_SESSION["csrf_token"]; ?>',
+                        websiteId: websiteId,
+                        status: 'updated'
+                    })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    alert('Project marked as updated!');
+                    window.location.reload();
+                } else {
+                    alert('Error: ' + result.message);
+                }
+            } catch (err) {
+                alert('Request failed: ' + err.message);
+            }
+        });
 
-                <div class="modal-body">
-
-                    <input type="hidden" name="websiteId" id="websiteId">
-
-                    <div class="mb-2">
-                        <label>Version</label>
-                        <input type="text" name="version" class="form-control" required>
-                    </div>
-
-                    <div class="mb-2">
-                        <label>Status</label>
-                        <select name="status" class="form-control">
-                            <option value="updated">Updated</option>
-                            <option value="updating">Updating</option>
-                            <option value="issue">Issue</option>
-                        </select>
-                    </div>
-
-                    <div>
-                        <label>Notes</label>
-                        <textarea name="note" class="form-control"></textarea>
-                    </div>
-
-                </div>
-
-                <div class="modal-footer">
-                    <button class="btn btn-success">Save</button>
-                </div>
-
-            </form>
-
-        </div>
-    </div>
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-
-<script>
-document.querySelectorAll(".updateBtn").forEach(btn=>{
-    btn.addEventListener("click", function(){
-        document.getElementById("websiteId").value = this.dataset.id;
     });
-});
-</script>
+    </script>
 
 </body>
 </html>
-
