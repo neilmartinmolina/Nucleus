@@ -4,7 +4,7 @@
 require_once __DIR__ . "/vendor/autoload.php";
 
 // Load .env if available
-$dotenv = Dotenv\Dotenv::createImmutable(__DIR__);
+$dotenv = Dotenv\Dotenv::createImmutable(__DIR__ . "/../../");
 $dotenv->safeLoad();
 
 /**
