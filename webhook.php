@@ -1,4 +1,5 @@
 <?php
+define("NUCLEUS_SKIP_CORE_BOOTSTRAP", true);
 require_once __DIR__ . "/includes/db.php";
 
 header("Content-Type: application/json");
@@ -116,7 +117,8 @@ function updateWebsiteStatus(PDO $pdo, int $websiteId, string $status, ?string $
     }
 }
 
-if ($_SERVER["REQUEST_METHOD"] !== "POST") {
+$requestMethod = $_SERVER["REQUEST_METHOD"] ?? "GET";
+if ($requestMethod !== "POST") {
     respond(405, ["success" => false, "message" => "Method not allowed"]);
 }
 
