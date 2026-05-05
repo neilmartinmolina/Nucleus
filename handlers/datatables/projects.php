@@ -1,0 +1,143 @@
+<?php
+require_once __DIR__ . "/../../includes/core.php";
+
+header("Content-Type: application/json");
+
+if (!isAuthenticated()) {
+    http_response_code(403);
+    echo json_encode(["draw" => (int) ($_GET["draw"] ?? 0), "recordsTotal" => 0, "recordsFiltered" => 0, "data" => []]);
+    exit;
+}
+
+function dtProjectLike(string $value): string
+{
+    return "%" . str_replace(["\\", "%", "_"], ["\\\\", "\\%", "\\_"], $value) . "%";
+}
+
+function dtProjectWhere(string $accessWhere, string $search, array $accessParams, array &$params): string
+{
+    $parts = [];
+    if ($accessWhere !== "") {
+        $parts[] = preg_replace('/^\s*WHERE\s+/i', '', $accessWhere);
+        $params = array_merge($params, $accessParams);
+    }
+
+    if ($search !== "") {
+        $parts[] = "(
+            p.project_name LIKE ? ESCAPE '\\\\'
+            OR s.subject_code LIKE ? ESCAPE '\\\\'
+            OR dc.commit_hash LIKE ? ESCAPE '\\\\'
+            OR ps.status LIKE ? ESCAPE '\\\\'
+            OR u.fullName LIKE ? ESCAPE '\\\\'
+            OR p.last_updated_at LIKE ? ESCAPE '\\\\'
+            OR p.saved_at LIKE ? ESCAPE '\\\\'
+        )";
+        $like = dtProjectLike($search);
+        $params = array_merge($params, array_fill(0, 7, $like));
+    }
+
+    return $parts ? "WHERE " . implode(" AND ", $parts) : "";
+}
+
+$draw = max(0, (int) ($_GET["draw"] ?? 0));
+$start = max(0, (int) ($_GET["start"] ?? 0));
+$length = (int) ($_GET["length"] ?? 10);
+$length = $length > 0 ? min($length, 100) : 10;
+$search = trim((string) ($_GET["search"]["value"] ?? ""));
+$orderColumn = (int) ($_GET["order"][0]["column"] ?? 5);
+$orderDir = strtolower((string) ($_GET["order"][0]["dir"] ?? "desc")) === "asc" ? "ASC" : "DESC";
+
+$orderMap = [
+    0 => "p.project_name",
+    1 => "s.subject_code",
+    2 => "ps.status",
+    3 => "dc.response_time_ms",
+    4 => "u.fullName",
+    5 => "p.last_updated_at",
+    6 => "COALESCE(p.saved_at, p.created_at)",
+];
+$orderBy = $orderMap[$orderColumn] ?? "p.last_updated_at";
+
+$roleManager = new RoleManager($pdo);
+[$accessWhere, $accessParams] = $roleManager->projectAccessSql("p");
+
+$fromSql = "
+    FROM projects p
+    LEFT JOIN project_status ps ON ps.project_id = p.project_id
+    LEFT JOIN users u ON ps.updated_by = u.userId
+    LEFT JOIN subjects s ON p.subject_id = s.subject_id
+    LEFT JOIN deployment_checks dc ON dc.id = (
+        SELECT id
+        FROM deployment_checks
+        WHERE project_id = p.project_id
+        ORDER BY checked_at DESC, id DESC
+        LIMIT 1
+    )
+";
+
+$totalParams = [];
+$totalWhere = dtProjectWhere($accessWhere, "", $accessParams, $totalParams);
+$totalStmt = $pdo->prepare("SELECT COUNT(*) FROM projects p {$totalWhere}");
+$totalStmt->execute($totalParams);
+$recordsTotal = (int) $totalStmt->fetchColumn();
+
+$filteredParams = [];
+$filteredWhere = dtProjectWhere($accessWhere, $search, $accessParams, $filteredParams);
+$filteredStmt = $pdo->prepare("SELECT COUNT(*) {$fromSql} {$filteredWhere}");
+$filteredStmt->execute($filteredParams);
+$recordsFiltered = (int) $filteredStmt->fetchColumn();
+
+$dataStmt = $pdo->prepare("
+    SELECT p.*, ps.status, ps.status_note, ps.updated_by AS updatedBy, u.fullName, s.subject_code AS folderName,
+           dc.response_time_ms, dc.status_source,
+           dc.commit_hash, dc.branch, dc.checked_at AS latest_check_at,
+           (SELECT MAX(checked_at) FROM deployment_checks WHERE project_id = p.project_id AND status = 'deployed') AS last_successful_check,
+           (SELECT COUNT(*) FROM deployment_checks dcf WHERE dcf.project_id = p.project_id AND dcf.status IN ('warning','error') AND dcf.checked_at > COALESCE((SELECT MAX(dcs.checked_at) FROM deployment_checks dcs WHERE dcs.project_id = p.project_id AND dcs.status = 'deployed'), '1970-01-01')) AS consecutive_failures
+    {$fromSql}
+    {$filteredWhere}
+    ORDER BY {$orderBy} {$orderDir}, p.project_id DESC
+    LIMIT {$length} OFFSET {$start}
+");
+$dataStmt->execute($filteredParams);
+
+$canUpdate = hasPermission("update_project");
+$canDelete = hasPermission("delete_project");
+$rows = [];
+
+foreach ($dataStmt->fetchAll() as $project) {
+    $projectId = (int) $project["project_id"];
+    $status = htmlspecialchars($project["status"] ?? "initializing");
+    $statusTitle = htmlspecialchars($project["status_note"] ?? "");
+    $responseTime = $project["response_time_ms"] ? htmlspecialchars($project["response_time_ms"] . " ms") : "-";
+    $statusSource = htmlspecialchars($project["status_source"] ?? "-");
+
+    $actions = [];
+    if ($canUpdate) {
+        $actions[] = "<a href=\"dashboard.php?page=project-form&websiteId={$projectId}\" class=\"px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm transition-colors\">Edit</a>";
+        $actions[] = "<a href=\"dashboard.php?page=project-details&projectId={$projectId}\" class=\"px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 text-sm transition-colors\">Details</a>";
+        if (!empty($project["subject_id"])) {
+            $actions[] = "<a href=\"get_content.php?tab=websites&unlist={$projectId}\" data-confirm=\"This removes the project from its subject without deleting it.\" data-confirm-title=\"Unlist this project?\" data-confirm-button=\"Unlist\" data-return-page=\"websites\" class=\"px-3 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 text-sm transition-colors\">Unlist</a>";
+        }
+    }
+    if ($canDelete) {
+        $actions[] = "<a href=\"get_content.php?tab=websites&delete={$projectId}\" data-confirm=\"This permanently deletes the project record.\" data-confirm-title=\"Delete this project?\" data-confirm-button=\"Delete\" data-return-page=\"websites\" class=\"px-3 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 text-sm transition-colors\">Delete</a>";
+    }
+
+    $rows[] = [
+        "<span class=\"font-medium text-slate-800\">" . htmlspecialchars($project["project_name"]) . "</span>",
+        "<span class=\"text-sm text-slate-600\">" . htmlspecialchars($project["folderName"] ?? "-") . "</span>",
+        "<span data-project-status-id=\"{$projectId}\" title=\"{$statusTitle}\" class=\"px-2 py-1 rounded text-sm font-medium badge-{$status}\">" . ucfirst($status) . "</span><div class=\"mt-1 text-xs text-slate-500\">" . htmlspecialchars(deploymentModeLabel($project["deployment_mode"] ?? "hostinger_git")) . "</div>",
+        "<div class=\"text-xs text-slate-500\"><div><span data-status-response-time>{$responseTime}</span> &middot; <span data-status-source>{$statusSource}</span></div><div>Last OK: <span data-last-successful-check>" . htmlspecialchars(formatNucleusDateTime($project["last_successful_check"])) . "</span></div><div>Failures: <span data-consecutive-failures>" . (int) ($project["consecutive_failures"] ?? 0) . "</span></div></div>",
+        "<span class=\"text-sm text-slate-600\">" . htmlspecialchars(displayUpdatedBy($project)) . "</span>",
+        "<span class=\"text-sm text-slate-500\">" . htmlspecialchars(formatNucleusDateTime($project["last_updated_at"])) . "</span>",
+        "<span class=\"text-sm text-slate-500\">" . htmlspecialchars(formatNucleusDateTime($project["saved_at"] ?? $project["created_at"])) . "</span>",
+        "<div class=\"flex items-center gap-2\">" . implode("", $actions) . "</div>",
+    ];
+}
+
+echo json_encode([
+    "draw" => $draw,
+    "recordsTotal" => $recordsTotal,
+    "recordsFiltered" => $recordsFiltered,
+    "data" => $rows,
+]);

@@ -18,6 +18,19 @@ $stmt = $pdo->prepare("
 $stmt->execute([$userId]);
 $currentUser = $stmt->fetch();
 generateCSRFToken();
+
+$dashboardPayload = [
+    "dataTables" => [
+        ["selector" => "#recentActivityTable", "order" => [[2, "desc"]], "disabledTargets" => [], "placeholder" => "Search activity..."],
+        ["selector" => "#dashboardProjectsTable", "order" => [[0, "asc"]], "disabledTargets" => hasPermission("update_project") ? [3] : [], "placeholder" => "Search projects..."],
+        ["selector" => "#projectsTable", "order" => [[5, "desc"]], "disabledTargets" => [7], "placeholder" => "Search projects..."],
+        ["selector" => "#usersTable", "order" => [[0, "asc"]], "disabledTargets" => [4], "placeholder" => "Search users..."],
+        ["selector" => "#websiteRequestsTable", "order" => [], "disabledTargets" => [], "placeholder" => "Search website requests..."],
+        ["selector" => "#subjectRequestsTable", "order" => [[4, "desc"]], "disabledTargets" => [], "placeholder" => "Search subject requests..."],
+        ["selector" => "#activityLogsTable", "order" => [[5, "desc"]], "disabledTargets" => [], "placeholder" => "Search logs..."],
+        ["selector" => "#projectChecksTable", "order" => [[0, "desc"]], "disabledTargets" => [], "placeholder" => "Search checks..."],
+    ],
+];
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -56,28 +69,160 @@ generateCSRFToken();
             background-color: #043873;
             border-radius: 0 4px 4px 0;
         }
+        .dt-container {
+            color: #334155;
+            font-size: 0.875rem;
+        }
+        .dt-container .dt-layout-row {
+            align-items: center;
+            gap: 1rem;
+            margin: 0;
+            padding: 1.125rem 1.5rem;
+        }
+        .dt-container .dt-layout-row:first-child {
+            border-bottom: 1px solid #f1f5f9;
+        }
+        .dt-container .dt-layout-row:last-child {
+            border-top: 1px solid #f1f5f9;
+            padding-top: 1rem;
+            padding-bottom: 1.25rem;
+        }
+        .dt-container .dt-length,
+        .dt-container .dt-search,
+        .dt-container .dt-info {
+            color: #64748b;
+            font-size: 0.8125rem;
+        }
+        .dt-container .dt-search label,
+        .dt-container .dt-length label {
+            display: inline-flex;
+            align-items: center;
+            gap: 30px;
+            font-weight: 500;
+        }
         .dt-container .dt-search input,
         .dt-container .dt-length select {
-            border: 1px solid #e2e8f0;
+            min-height: 2.25rem;
+            border: 1px solid #dbe4ef;
             border-radius: 0.5rem;
+            background: #f8fafc;
             color: #334155;
             font-size: 0.875rem;
             outline: none;
+            transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
+        }
+        .dt-container .dt-search input {
+            min-width: 15rem;
+            padding: 0.5rem 0.75rem;
+        }
+        .dt-container .dt-length select {
+            padding: 0.375rem 2rem 0.375rem 0.75rem;
         }
         .dt-container .dt-search input:focus,
         .dt-container .dt-length select:focus {
             border-color: #4F9CF9;
-            box-shadow: 0 0 0 2px rgba(79, 156, 249, 0.2);
+            background: #ffffff;
+            box-shadow: 0 0 0 3px rgba(79, 156, 249, 0.16);
+        }
+        .dt-container table.dataTable {
+            width: 100% !important;
+            border-collapse: separate !important;
+            border-spacing: 0;
+        }
+        .dt-container table.dataTable > thead > tr > th {
+            border-bottom: 1px solid #e2e8f0;
+            background: #f8fafc;
+            color: #475569;
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0;
+            padding-top: 0.875rem;
+            padding-bottom: 0.875rem;
+            padding-left: 1rem;
+            padding-right: 1rem;
+            text-transform: uppercase;
+            white-space: normal;
+        }
+        .dt-container table.dataTable > tbody > tr {
+            background: #ffffff;
+            transition: background-color 150ms ease;
+        }
+        .dt-container table.dataTable > tbody > tr:hover {
+            background: #f8fafc;
+        }
+        .dt-container table.dataTable > tbody > tr > td {
+            border-bottom: 1px solid #f1f5f9;
+            padding-top: 0.875rem;
+            padding-bottom: 0.875rem;
+            padding-left: 1rem;
+            padding-right: 1rem;
+            vertical-align: middle;
+            white-space: normal;
+            overflow-wrap: anywhere;
+            word-break: normal;
+        }
+        .dt-container table.dataTable > thead > tr > th:first-child,
+        .dt-container table.dataTable > tbody > tr > td:first-child {
+            padding-left: 1.5rem;
+        }
+        .dt-container table.dataTable > thead > tr > th:last-child,
+        .dt-container table.dataTable > tbody > tr > td:last-child {
+            padding-right: 1.5rem;
+        }
+        .dt-container table.dataTable > tbody > tr:last-child > td {
+            border-bottom: 0;
+        }
+        .dt-container .dt-paging {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding-right: 0.125rem;
+        }
+        .dt-container .dt-paging .dt-paging-button {
+            min-width: 2rem;
+            border: 1px solid #bfdbfe !important;
+            border-radius: 0.5rem !important;
+            background: #ffffff !important;
+            color: #043873 !important;
+            font-size: 0.8125rem;
+            line-height: 1.25rem;
+            padding: 0.375rem 0.625rem !important;
+            transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
         }
         .dt-container .dt-paging .dt-paging-button.current {
+            background: #e0f2fe !important;
+            border-color: #4F9CF9 !important;
+            color: #043873 !important;
+            font-weight: 700;
+        }
+        .dt-container .dt-paging .dt-paging-button:not(.disabled):hover {
             background: #043873 !important;
             border-color: #043873 !important;
             color: #ffffff !important;
         }
-        .dt-container .dt-paging .dt-paging-button:hover {
-            background: #f1f5f9 !important;
-            border-color: #e2e8f0 !important;
-            color: #043873 !important;
+        .dt-container .dt-paging .dt-paging-button.disabled {
+            color: #cbd5e1 !important;
+            cursor: not-allowed !important;
+        }
+        .dt-scroll-body {
+            border-bottom: 0 !important;
+            overflow-x: hidden !important;
+        }
+        .dt-container .data-table a,
+        .dt-container .data-table button,
+        .dt-container .data-table span {
+            max-width: 100%;
+        }
+        .dt-container .data-table td:last-child .flex {
+            flex-wrap: wrap;
+        }
+        .nucleus-table-inner .dt-layout-row {
+            padding-left: 2rem;
+            padding-right: 2rem;
+        }
+        .nucleus-table-inner .dt-layout-table {
+            padding-left: 0.5rem;
+            padding-right: 0.5rem;
         }
     </style>
 </head>
@@ -168,6 +313,9 @@ generateCSRFToken();
     <script src="https://cdn.datatables.net/2.3.8/js/dataTables.min.js"></script>
     <script src="https://cdn.datatables.net/2.3.8/js/dataTables.tailwindcss.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+        window.__NUCLEUS_DASHBOARD__ = <?php echo json_encode($dashboardPayload, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+    </script>
 
     <!-- JavaScript for AJAX navigation -->
     <script>
@@ -179,33 +327,58 @@ generateCSRFToken();
         function initNucleusDataTables(scope = document) {
             if (!window.DataTable) return;
 
+            const dashboardConfig = window.__NUCLEUS_DASHBOARD__ || {};
+            const tableConfigs = Array.isArray(dashboardConfig.dataTables) ? dashboardConfig.dataTables : [];
+            const tableConfigFor = table => tableConfigs.find(config => config.selector && table.matches(config.selector)) || {};
+
             scope.querySelectorAll('table.data-table').forEach(table => {
                 if (DataTable.isDataTable(table)) return;
 
+                const tableConfig = tableConfigFor(table);
+                const dataOrder = table.dataset.orderColumn
+                    ? [[Number(table.dataset.orderColumn), table.dataset.orderDirection || 'asc']]
+                    : [];
+                const disabledTargets = Array.isArray(tableConfig.disabledTargets) ? tableConfig.disabledTargets : [];
                 const options = {
                     autoWidth: false,
+                    deferRender: true,
                     pageLength: Number(table.dataset.pageLength || 10),
                     lengthMenu: [5, 10, 25, 50],
-                    order: table.dataset.orderColumn
-                        ? [[Number(table.dataset.orderColumn), table.dataset.orderDirection || 'asc']]
-                        : [],
-                    scrollX: true,
+                    orderClasses: false,
+                    order: Array.isArray(tableConfig.order) && tableConfig.order.length ? tableConfig.order : dataOrder,
+                    scrollX: false,
                     language: {
                         search: '',
-                        searchPlaceholder: 'Search records...',
+                        searchPlaceholder: tableConfig.placeholder || table.dataset.placeholder || 'Search records...',
                         lengthMenu: 'Show _MENU_',
+                        info: 'Showing _START_ to _END_ of _TOTAL_',
+                        infoEmpty: 'No records to show',
                         emptyTable: table.dataset.empty || 'No records found',
                         zeroRecords: 'No matching records found'
                     }
                 };
+
+                if (table.dataset.serverSide === 'true' && table.dataset.ajax) {
+                    options.processing = true;
+                    options.serverSide = true;
+                    options.ajax = table.dataset.ajax;
+                    options.searchDelay = 350;
+                }
 
                 if (table.dataset.scrollY) {
                     options.scrollY = table.dataset.scrollY;
                     options.scrollCollapse = true;
                 }
 
+                const columnDefs = [];
                 if (table.querySelector('th.no-sort')) {
-                    options.columnDefs = [{ targets: 'no-sort', orderable: false, searchable: false }];
+                    columnDefs.push({ targets: 'no-sort', orderable: false, searchable: false });
+                }
+                if (disabledTargets.length) {
+                    columnDefs.push({ targets: disabledTargets, orderable: false, searchable: false });
+                }
+                if (columnDefs.length) {
+                    options.columnDefs = columnDefs;
                 }
 
                 const externalSearch = table.id ? scope.querySelector(`[data-table-search="#${table.id}"]`) : null;
@@ -213,6 +386,13 @@ generateCSRFToken();
                     options.layout = {
                         topStart: 'pageLength',
                         topEnd: null,
+                        bottomStart: 'info',
+                        bottomEnd: 'paging'
+                    };
+                } else {
+                    options.layout = {
+                        topStart: 'pageLength',
+                        topEnd: 'search',
                         bottomStart: 'info',
                         bottomEnd: 'paging'
                     };
@@ -257,6 +437,8 @@ generateCSRFToken();
         }
 
         let statusPollTimer = null;
+        let statusPollFirstRun = null;
+        let statusPollStartTimer = null;
 
         function statusBadgeClasses(status, compact = false) {
             if (compact) {
@@ -312,13 +494,48 @@ generateCSRFToken();
                 clearInterval(statusPollTimer);
                 statusPollTimer = null;
             }
+            if (statusPollFirstRun) {
+                if (statusPollFirstRun.type === 'idle' && window.cancelIdleCallback) {
+                    window.cancelIdleCallback(statusPollFirstRun.id);
+                } else {
+                    clearTimeout(statusPollFirstRun.id);
+                }
+                statusPollFirstRun = null;
+            }
 
-            const badges = Array.from(scope.querySelectorAll('[data-project-status-id]'));
-            if (!badges.length) return;
+            let nextProjectIndex = 0;
+
+            function currentProjectIds() {
+                return Array.from(new Set(
+                    Array.from(scope.querySelectorAll('[data-project-status-id]'))
+                        .map(badge => badge.dataset.projectStatusId)
+                        .filter(Boolean)
+                ));
+            }
+
+            async function runLimited(items, limit, worker) {
+                const queue = [...items];
+                const workers = Array.from({ length: Math.min(limit, queue.length) }, async () => {
+                    while (queue.length) {
+                        const item = queue.shift();
+                        await worker(item);
+                    }
+                });
+                await Promise.all(workers);
+            }
 
             async function pollOnce() {
-                const projectIds = Array.from(new Set(badges.map(badge => badge.dataset.projectStatusId).filter(Boolean)));
-                await Promise.all(projectIds.map(async projectId => {
+                const projectIds = currentProjectIds();
+                if (!projectIds.length) return;
+                const batchSize = 6;
+                const batch = [];
+                while (batch.length < batchSize && batch.length < projectIds.length) {
+                    if (nextProjectIndex >= projectIds.length) nextProjectIndex = 0;
+                    batch.push(projectIds[nextProjectIndex]);
+                    nextProjectIndex = (nextProjectIndex + 1) % projectIds.length;
+                }
+
+                await runLimited(batch, 2, async projectId => {
                     try {
                         const response = await fetch('handlers/check_project_status.php?projectId=' + encodeURIComponent(projectId), {
                             headers: { 'Accept': 'application/json' }
@@ -329,21 +546,131 @@ generateCSRFToken();
                     } catch (err) {
                         console.debug('Status poll failed', err);
                     }
-                }));
+                });
             }
 
-            pollOnce();
-            statusPollTimer = setInterval(pollOnce, 5000);
+            statusPollTimer = setInterval(pollOnce, 30000);
+            if (window.requestIdleCallback) {
+                statusPollFirstRun = { type: 'idle', id: window.requestIdleCallback(pollOnce, { timeout: 8000 }) };
+            } else {
+                statusPollFirstRun = { type: 'timeout', id: setTimeout(pollOnce, 8000) };
+            }
+        }
+
+        function scheduleLiveStatusUpdates(scope = contentEl) {
+            if (statusPollStartTimer) {
+                clearTimeout(statusPollStartTimer);
+                statusPollStartTimer = null;
+            }
+
+            statusPollStartTimer = setTimeout(() => {
+                statusPollStartTimer = null;
+                initStatusPolling(scope);
+            }, 2500);
+        }
+
+        function stopLiveStatusUpdates() {
+            if (statusPollStartTimer) {
+                clearTimeout(statusPollStartTimer);
+                statusPollStartTimer = null;
+            }
+            if (statusPollTimer) {
+                clearInterval(statusPollTimer);
+                statusPollTimer = null;
+            }
+            if (statusPollFirstRun) {
+                if (statusPollFirstRun.type === 'idle' && window.cancelIdleCallback) {
+                    window.cancelIdleCallback(statusPollFirstRun.id);
+                } else {
+                    clearTimeout(statusPollFirstRun.id);
+                }
+                statusPollFirstRun = null;
+            }
+        }
+
+        async function refreshProjectStatuses(scope = contentEl) {
+            const badges = Array.from(scope.querySelectorAll('[data-project-status-id]'));
+            const projectIds = Array.from(new Set(badges.map(badge => badge.dataset.projectStatusId).filter(Boolean)));
+            if (!projectIds.length) return;
+
+            async function runLimited(items, limit, worker) {
+                const queue = [...items];
+                const workers = Array.from({ length: Math.min(limit, queue.length) }, async () => {
+                    while (queue.length) {
+                        const item = queue.shift();
+                        await worker(item);
+                    }
+                });
+                await Promise.all(workers);
+            }
+
+            await runLimited(projectIds, 2, async projectId => {
+                try {
+                    const response = await fetch('handlers/check_project_status.php?projectId=' + encodeURIComponent(projectId), {
+                        headers: { 'Accept': 'application/json' }
+                    });
+                    const result = await response.json();
+                    if (!result.success) return;
+                    scope.querySelectorAll(`[data-project-status-id="${CSS.escape(projectId)}"]`).forEach(badge => applyProjectStatus(badge, result));
+                } catch (err) {
+                    console.debug('Status refresh failed', err);
+                }
+            });
+        }
+
+        function showPageLoading(page) {
+            stopLiveStatusUpdates();
+            titleEl.textContent = pageTitles(page);
+            contentEl.innerHTML = `
+                <div class="space-y-6" aria-live="polite" aria-busy="true">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <div class="h-7 w-44 animate-pulse rounded bg-slate-200"></div>
+                            <div class="mt-3 h-4 w-64 animate-pulse rounded bg-slate-100"></div>
+                        </div>
+                        <div class="h-10 w-28 animate-pulse rounded-lg bg-slate-200"></div>
+                    </div>
+                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                        ${Array.from({ length: 4 }).map(() => '<div class="h-28 animate-pulse rounded-xl border border-slate-200 bg-white"></div>').join('')}
+                    </div>
+                    <div class="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                        <div class="border-b border-slate-100 p-6">
+                            <div class="h-5 w-40 animate-pulse rounded bg-slate-200"></div>
+                            <div class="mt-3 h-4 w-72 animate-pulse rounded bg-slate-100"></div>
+                        </div>
+                        <div class="space-y-3 p-6">
+                            ${Array.from({ length: 6 }).map(() => '<div class="h-10 animate-pulse rounded bg-slate-100"></div>').join('')}
+                        </div>
+                    </div>
+                </div>
+            `;
         }
 
         function renderContent(page, html) {
             contentEl.innerHTML = html;
             runInlineScripts(contentEl);
             initNucleusDataTables(contentEl);
-            initStatusPolling(contentEl);
             updateActiveNav(page);
             titleEl.textContent = pageTitles(page);
             showFeedback(contentEl);
+            scheduleLiveStatusUpdates(contentEl);
+        }
+
+        async function reloadDashboardPage(page, params = new URLSearchParams()) {
+            params.set('tab', page);
+            showPageLoading(page);
+            const response = await fetch('get_content.php?' + params.toString(), {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            const html = await response.text();
+            renderContent(page, html);
+
+            const historyParams = new URLSearchParams(window.location.search);
+            historyParams.set('page', page);
+            params.forEach((value, key) => {
+                if (key !== 'tab') historyParams.set(key, value);
+            });
+            history.pushState({ page }, '', '?' + historyParams.toString());
         }
 
         function runExternalTableSearch(input) {
@@ -383,6 +710,8 @@ generateCSRFToken();
         function loadPage(page, pushState = true, params = new URLSearchParams()) {
             const fetchParams = new URLSearchParams(params);
             fetchParams.set('tab', page);
+            updateActiveNav(page);
+            showPageLoading(page);
 
             fetch('get_content.php?' + fetchParams.toString())
                 .then(res => res.text())
@@ -435,7 +764,7 @@ generateCSRFToken();
             const confirmation = await Swal.fire({
                 icon: 'question',
                 title: 'Mark this project as updated?',
-                text: 'Version will be incremented automatically.',
+                text: 'The project update status will be recorded.',
                 showCancelButton: true,
                 confirmButtonText: 'Update',
                 confirmButtonColor: '#3085d6'
@@ -480,17 +809,17 @@ generateCSRFToken();
                 });
                 if (confirmation.isConfirmed) {
                     form.dataset.confirmed = '1';
-                    form.requestSubmit();
+                } else {
+                    return;
                 }
-                return;
             }
 
             const action = new URL(form.action || window.location.href, window.location.href);
-            if (!action.pathname.endsWith('/get_content.php')) return;
+            if (!action.pathname.endsWith('/get_content.php') && !form.dataset.returnPage) return;
 
             e.preventDefault();
             const params = new URLSearchParams(action.search);
-            const page = params.get('tab') || new URLSearchParams(window.location.search).get('page') || 'dashboard';
+            const page = form.dataset.returnPage || params.get('tab') || new URLSearchParams(window.location.search).get('page') || 'dashboard';
 
             try {
                 const response = await fetch(action.toString(), {
@@ -498,6 +827,19 @@ generateCSRFToken();
                     body: new FormData(form),
                     headers: { 'X-Requested-With': 'XMLHttpRequest' }
                 });
+
+                if (!action.pathname.endsWith('/get_content.php')) {
+                    const result = await response.json();
+                    if (result.success) {
+                        await Swal.fire({ icon: 'success', title: 'Done', text: result.message || 'Action completed.', confirmButtonColor: '#3085d6' });
+                        await reloadDashboardPage(result.page || page);
+                    } else {
+                        Swal.fire({ icon: 'error', title: 'Action failed', text: result.message || 'The action could not be completed.', confirmButtonColor: '#3085d6' });
+                    }
+                    delete form.dataset.confirmed;
+                    return;
+                }
+
                 const html = await response.text();
                 renderContent(page, html);
 
@@ -509,6 +851,8 @@ generateCSRFToken();
                 history.pushState({ page }, '', '?' + historyParams.toString());
             } catch (err) {
                 Swal.fire({ icon: 'error', title: 'Request failed', text: err.message, confirmButtonColor: '#3085d6' });
+            } finally {
+                delete form.dataset.confirmed;
             }
         });
 
@@ -526,6 +870,20 @@ generateCSRFToken();
         });
 
         contentEl.addEventListener('click', async function(e) {
+            const refreshButton = e.target.closest('[data-refresh-statuses]');
+            if (refreshButton) {
+                refreshButton.disabled = true;
+                const originalText = refreshButton.textContent;
+                refreshButton.textContent = 'Refreshing...';
+                try {
+                    await refreshProjectStatuses(contentEl);
+                } finally {
+                    refreshButton.disabled = false;
+                    refreshButton.textContent = originalText;
+                }
+                return;
+            }
+
             const link = e.target.closest('a[data-confirm]');
             if (!link) return;
 
@@ -539,7 +897,31 @@ generateCSRFToken();
                 confirmButtonColor: '#3085d6'
             });
             if (confirmation.isConfirmed) {
-                window.location.href = link.href;
+                try {
+                    const action = new URL(link.href, window.location.href);
+                    const page = link.dataset.returnPage || new URLSearchParams(action.search).get('tab') || new URLSearchParams(window.location.search).get('page') || 'dashboard';
+                    const response = await fetch(action.toString(), {
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                    });
+
+                    if (action.pathname.endsWith('/get_content.php')) {
+                        const html = await response.text();
+                        renderContent(page, html);
+                        const historyParams = new URLSearchParams(window.location.search);
+                        historyParams.set('page', page);
+                        history.pushState({ page }, '', '?' + historyParams.toString());
+                    } else {
+                        const result = await response.json();
+                        if (result.success) {
+                            await Swal.fire({ icon: 'success', title: 'Done', text: result.message || 'Action completed.', confirmButtonColor: '#3085d6' });
+                            await reloadDashboardPage(result.page || page);
+                        } else {
+                            Swal.fire({ icon: 'error', title: 'Action failed', text: result.message || 'The action could not be completed.', confirmButtonColor: '#3085d6' });
+                        }
+                    }
+                } catch (err) {
+                    Swal.fire({ icon: 'error', title: 'Request failed', text: err.message, confirmButtonColor: '#3085d6' });
+                }
             }
         });
 

@@ -295,6 +295,7 @@ if (hasPermission("manage_requests")) {
         JOIN users requester ON requester.userId = sr.requested_by
         LEFT JOIN users reviewer ON reviewer.userId = sr.reviewed_by
         ORDER BY FIELD(sr.status, 'pending', 'approved', 'rejected'), sr.created_at DESC
+        LIMIT 250
     ");
     $subjectRequests = $stmt->fetchAll();
 } else {
@@ -304,6 +305,7 @@ if (hasPermission("manage_requests")) {
         LEFT JOIN users reviewer ON reviewer.userId = sr.reviewed_by
         WHERE sr.requested_by = ?
         ORDER BY sr.created_at DESC
+        LIMIT 250
     ");
     $stmt->execute([$_SESSION["userId"]]);
     $subjectRequests = $stmt->fetchAll();
@@ -319,6 +321,7 @@ if ($canReviewProjectRequests) {
             JOIN users requester ON requester.userId = pr.requested_by
             LEFT JOIN users reviewer ON reviewer.userId = pr.reviewed_by
             ORDER BY FIELD(pr.status, 'pending', 'approved', 'rejected'), pr.created_at DESC
+            LIMIT 250
         ");
         $projectRequests = $stmt->fetchAll();
     } else {
@@ -330,6 +333,7 @@ if ($canReviewProjectRequests) {
             JOIN users requester ON requester.userId = pr.requested_by
             LEFT JOIN users reviewer ON reviewer.userId = pr.reviewed_by
             ORDER BY FIELD(pr.status, 'pending', 'approved', 'rejected'), pr.created_at DESC
+            LIMIT 250
         ");
         $stmt->execute([$_SESSION["userId"]]);
         $projectRequests = $stmt->fetchAll();
@@ -342,6 +346,7 @@ if ($canReviewProjectRequests) {
         LEFT JOIN users reviewer ON reviewer.userId = pr.reviewed_by
         WHERE pr.requested_by = ?
         ORDER BY pr.created_at DESC
+        LIMIT 250
     ");
     $stmt->execute([$_SESSION["userId"]]);
     $projectRequests = $stmt->fetchAll();
@@ -434,14 +439,14 @@ $subjects = $pdo->query("SELECT subject_id, subject_code, subject_name FROM subj
       <input id="websiteRequestSearch" type="search" data-table-search="#websiteRequestsTable" placeholder="Search by website, subject, requester, status, or message" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-cta focus:ring-2 focus:ring-cta/20">
     </div>
   </div>
-  <div class="overflow-x-auto">
-    <table id="websiteRequestsTable" class="data-table w-full" data-page-length="10" data-order-column="<?php echo $canReviewProjectRequests ? 6 : 5; ?>" data-order-direction="desc" data-empty="No website requests found">
+  <div class="overflow-x-auto lg:overflow-x-visible">
+    <div class="nucleus-table-inner px-3 sm:px-4">
+    <table id="websiteRequestsTable" class="data-table w-full" data-page-length="10" data-order-column="<?php echo $canReviewProjectRequests ? 5 : 4; ?>" data-order-direction="desc" data-empty="No website requests found">
       <thead class="bg-slate-50">
         <tr class="text-left text-sm text-slate-600 border-b border-slate-200">
           <th class="pb-3 pl-6 pr-4 font-semibold">Website</th>
           <th class="pb-3 pr-4 font-semibold">Subject</th>
           <?php if ($canReviewProjectRequests): ?><th class="pb-3 pr-4 font-semibold">Requested By</th><?php endif; ?>
-          <th class="pb-3 pr-4 font-semibold">Version</th>
           <th class="pb-3 pr-4 font-semibold">Status</th>
           <th class="pb-3 pr-4 font-semibold">Message</th>
           <th class="pb-3 pr-4 font-semibold">Requested</th>
@@ -461,7 +466,6 @@ $subjects = $pdo->query("SELECT subject_id, subject_code, subject_name FROM subj
             <div class="text-sm text-slate-500"><?php echo htmlspecialchars($request["subject_name"]); ?></div>
           </td>
           <?php if ($canReviewProjectRequests): ?><td class="py-4 pr-4 text-sm text-slate-600"><?php echo htmlspecialchars($request["requesterName"]); ?></td><?php endif; ?>
-          <td class="py-4 pr-4 text-sm text-slate-600"><?php echo htmlspecialchars($request["requested_version"]); ?></td>
           <td class="py-4 pr-4"><span class="rounded px-2 py-1 text-sm font-medium status-<?php echo htmlspecialchars($request["status"]); ?>"><?php echo ucfirst($request["status"]); ?></span></td>
           <td class="py-4 pr-4 text-sm text-slate-600"><?php echo htmlspecialchars($request["message"] ?? ""); ?></td>
           <td class="py-4 pr-4 text-sm text-slate-500"><?php echo htmlspecialchars(formatNucleusDateTime($request["created_at"])); ?></td>
@@ -491,6 +495,7 @@ $subjects = $pdo->query("SELECT subject_id, subject_code, subject_name FROM subj
         <?php endforeach; ?>
       </tbody>
     </table>
+    </div>
   </div>
 </section>
 
@@ -503,7 +508,8 @@ $subjects = $pdo->query("SELECT subject_id, subject_code, subject_name FROM subj
       <input id="subjectRequestSearch" type="search" data-table-search="#subjectRequestsTable" placeholder="Search by subject, requester, status, description, or date" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-cta focus:ring-2 focus:ring-cta/20">
     </div>
   </div>
-  <div class="overflow-x-auto">
+  <div class="overflow-x-auto lg:overflow-x-visible">
+    <div class="nucleus-table-inner px-3 sm:px-4">
     <table id="subjectRequestsTable" class="data-table w-full" data-page-length="10" data-order-column="4" data-order-direction="desc" data-empty="No subject requests found">
       <thead class="bg-slate-50">
         <tr class="text-left text-sm text-slate-600 border-b border-slate-200">
@@ -552,6 +558,7 @@ $subjects = $pdo->query("SELECT subject_id, subject_code, subject_name FROM subj
         <?php endforeach; ?>
       </tbody>
     </table>
+    </div>
   </div>
 </section>
 <?php endif; ?>

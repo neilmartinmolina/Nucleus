@@ -89,8 +89,9 @@ $status = $project["status"] ?? "initializing";
     <h2 class="text-lg font-semibold text-slate-800">Recent Check History</h2>
     <p class="mt-1 text-sm text-slate-500">Latest 50 monitoring checks recorded for this project.</p>
   </div>
-  <div class="overflow-x-auto">
-    <table class="data-table w-full" data-page-length="10" data-order-column="0" data-order-direction="desc" data-empty="No deployment checks recorded yet">
+  <div class="overflow-x-auto lg:overflow-x-visible">
+    <div class="nucleus-table-inner px-3 sm:px-4">
+    <table id="projectChecksTable" class="data-table w-full" data-page-length="10" data-order-column="0" data-order-direction="desc" data-empty="No deployment checks recorded yet">
       <thead class="bg-slate-50">
         <tr class="text-left text-sm text-slate-600 border-b border-slate-200">
           <th class="pb-3 pl-6 pr-4 font-semibold">Checked At</th>
@@ -98,7 +99,6 @@ $status = $project["status"] ?? "initializing";
           <th class="pb-3 pr-4 font-semibold">HTTP</th>
           <th class="pb-3 pr-4 font-semibold">Response</th>
           <th class="pb-3 pr-4 font-semibold">Source</th>
-          <th class="pb-3 pr-4 font-semibold">Version</th>
           <th class="pb-3 pr-4 font-semibold">Commit</th>
           <th class="pb-3 pr-4 font-semibold">Branch</th>
           <th class="pb-3 pr-6 font-semibold">Message</th>
@@ -112,7 +112,6 @@ $status = $project["status"] ?? "initializing";
           <td class="py-3 pr-4 text-sm text-slate-600"><?php echo htmlspecialchars($check["http_code"] ?? "—"); ?></td>
           <td class="py-3 pr-4 text-sm text-slate-600"><?php echo $check["response_time_ms"] ? htmlspecialchars($check["response_time_ms"] . " ms") : "—"; ?></td>
           <td class="py-3 pr-4 text-sm text-slate-600"><?php echo htmlspecialchars($check["status_source"]); ?></td>
-          <td class="py-3 pr-4 text-sm text-slate-600"><?php echo htmlspecialchars($check["version"] ?? "—"); ?></td>
           <td class="py-3 pr-4 text-sm text-slate-600"><?php echo htmlspecialchars(!empty($check["commit_hash"]) ? substr($check["commit_hash"], 0, 12) : "—"); ?></td>
           <td class="py-3 pr-4 text-sm text-slate-600"><?php echo htmlspecialchars($check["branch"] ?? "—"); ?></td>
           <td class="py-3 pr-6 text-sm text-slate-600"><?php echo htmlspecialchars($check["error_message"] ?: "OK"); ?></td>
@@ -120,6 +119,7 @@ $status = $project["status"] ?? "initializing";
         <?php endforeach; ?>
       </tbody>
     </table>
+    </div>
   </div>
 </section>
 
@@ -130,3 +130,5 @@ $status = $project["status"] ?? "initializing";
 .badge-warning { background:#ffedd5; color:#9a3412; }
 .badge-error { background:#fee2e2; color:#991b1b; }
 </style>
+
+

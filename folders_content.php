@@ -277,7 +277,7 @@ if (!empty($subjectIds)) {
           <?php echo strtoupper(substr($f['subject_code'], 0, 1)); ?>
         </div>
         <?php if (hasPermission("manage_groups")): ?>
-        <form method="POST" action="delete-folder.php" data-confirm="Projects will be unlinked but not deleted." data-confirm-title="Delete this subject?" data-confirm-button="Delete">
+        <form method="POST" action="delete-folder.php" data-confirm="Projects will be unlinked but not deleted." data-confirm-title="Delete this subject?" data-confirm-button="Delete" data-return-page="folders">
           <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
           <input type="hidden" name="id" value="<?php echo $f['subject_id']; ?>">
           <button type="submit" class="p-1.5 hover:bg-red-50 rounded-lg transition-colors text-red-500">
@@ -294,7 +294,7 @@ if (!empty($subjectIds)) {
           <span class="font-medium text-slate-800"><?php echo $f['projectCount']; ?></span>
           <span class="text-slate-500"> projects</span>
         </div>
-        <a href="view-folder.php?folderId=<?php echo $f['subject_id']; ?>" class="text-cta text-sm font-medium hover:text-cta-600 transition-colors">View Projects →</a>
+        <a href="dashboard.php?page=view-folder&folderId=<?php echo $f['subject_id']; ?>" class="text-cta text-sm font-medium hover:text-cta-600 transition-colors">View Projects →</a>
       </div>
       <div class="mt-3 pt-3 border-t border-slate-100">
         <div class="flex items-center gap-2 text-xs text-slate-400">

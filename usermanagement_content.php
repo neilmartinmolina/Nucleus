@@ -121,7 +121,8 @@ if ($editUserId) {
           <input id="userSearch" type="search" data-table-search="#usersTable" placeholder="Search by username, name, role, or access" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-cta focus:ring-2 focus:ring-cta/20">
         </div>
       </div>
-      <div class="overflow-x-auto">
+      <div class="overflow-x-auto lg:overflow-x-visible">
+        <div class="nucleus-table-inner px-3 sm:px-4">
         <table id="usersTable" class="data-table w-full" data-page-length="10" data-order-column="0" data-order-direction="asc" data-empty="No users found">
           <thead class="bg-slate-50">
             <tr class="text-left text-sm text-slate-600 border-b border-slate-200">
@@ -144,6 +145,7 @@ if ($editUserId) {
             <?php endforeach; ?>
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   </div>

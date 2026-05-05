@@ -143,7 +143,8 @@ CREATE TABLE IF NOT EXISTS deployment_checks (
     remote_updated_at TIMESTAMP NULL,
     FOREIGN KEY (project_id) REFERENCES projects(project_id) ON DELETE CASCADE,
     INDEX idx_deployment_checks_project_checked (project_id, checked_at),
-    INDEX idx_deployment_checks_project_status (project_id, status)
+    INDEX idx_deployment_checks_project_status (project_id, status),
+    INDEX idx_deployment_checks_project_status_checked (project_id, status, checked_at)
 );
 
 CREATE TABLE IF NOT EXISTS project_members (

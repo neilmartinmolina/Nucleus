@@ -1,1 +1,3 @@
-                      <a href="delete-folder.php?id=<?= $folder["id"] ?>" onclick="return confirm('Delete this folder? Websites will be unlinked but not deleted.')" class="btn btn-sm btn-danger">Delete</a>
+<?php
+header("Location: dashboard.php?page=folders");
+exit;
