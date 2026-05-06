@@ -6,6 +6,7 @@ require_once __DIR__ . "/Security.php";
 require_once __DIR__ . "/SweetAlert.php";
 require_once __DIR__ . "/csrf.php";
 require_once __DIR__ . "/RoleManager.php";
+require_once __DIR__ . "/monitoring.php";
 
 // Secure session settings MUST come before session_start()
 if (function_exists("ini_set")) {
@@ -18,13 +19,19 @@ if (function_exists("ini_set")) {
     }
 }
 
-// Initialize session
-session_start();
+// Initialize session unless a trusted CLI/queue entry point explicitly opts out.
+if (!defined("NUCLEUS_SKIP_SESSION_BOOTSTRAP")) {
+    session_start();
+} elseif (!isset($_SESSION)) {
+    $_SESSION = [];
+}
 
 // Set security headers
-header("X-Content-Type-Options: nosniff");
-header("X-Frame-Options: DENY");
-header("X-XSS-Protection: 1; mode=block");
+if (!defined("NUCLEUS_SKIP_SESSION_BOOTSTRAP")) {
+    header("X-Content-Type-Options: nosniff");
+    header("X-Frame-Options: DENY");
+    header("X-XSS-Protection: 1; mode=block");
+}
 
 // Session timeout check (30 minutes)
 $isAuthenticated = isset($_SESSION["userId"]) && !empty($_SESSION["userId"]);
@@ -177,7 +184,7 @@ $isIndexPhp = ($currentFile === "index.php");
 $isLoginPage = ($currentFile === "login.php" || $currentFile === "signup.php" || $currentFile === "password_reset.php" || $currentFile === "password_reset_complete.php");
 $isPublicEndpoint = ($currentFile === "webhook.php" || $currentFile === "github-webhook.php");
 
-if (!$isIndexPhp && !$isLoginPage && !$isPublicEndpoint) {
+if (!defined("NUCLEUS_SKIP_SESSION_BOOTSTRAP") && !$isIndexPhp && !$isLoginPage && !$isPublicEndpoint) {
     // Direct file access - redirect to index.php routing
     if (!isAuthenticated()) {
         header("Location: index.php?page=login");

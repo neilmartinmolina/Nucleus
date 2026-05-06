@@ -19,8 +19,20 @@ switch ($tab) {
     case "websites":
         require_once __DIR__ . "/websites_content.php";
         break;
+    case "create-subject":
+        require_once __DIR__ . "/createsubject.php";
+        break;
+    case "create-project":
+        require_once __DIR__ . "/createproject.php";
+        break;
+    case "create-user":
+        require_once __DIR__ . "/createuser.php";
+        break;
+    case "manage-user":
+        require_once __DIR__ . "/manageuser.php";
+        break;
     case "project-form":
-        require_once __DIR__ . "/project_form.php";
+        require_once __DIR__ . "/createproject.php";
         break;
     case "project-details":
         require_once __DIR__ . "/project_details.php";

@@ -223,7 +223,7 @@ if (!$isEmbedded):
                 </select>
 
                 <?php if (hasPermission("create_project")): ?>
-                <a href="dashboard.php?page=project-form&folderId=<?php echo urlencode((string) $folderId); ?>" class="inline-flex items-center justify-center gap-2 rounded-lg bg-cta px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-500">
+                <a href="dashboard.php?page=create-project&folderId=<?php echo urlencode((string) $folderId); ?>" class="inline-flex items-center justify-center gap-2 rounded-lg bg-cta px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-500">
                     <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
                     </svg>
@@ -320,7 +320,7 @@ if (!$isEmbedded):
             <p class="text-base font-medium text-slate-700">No projects found</p>
             <p class="mt-1 text-sm text-slate-500">Try another search or add a new project to this subject.</p>
             <?php if (hasPermission("create_project")): ?>
-            <a href="dashboard.php?page=project-form&folderId=<?php echo urlencode((string) $folderId); ?>" class="mt-5 inline-flex items-center justify-center gap-2 rounded-lg bg-cta px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-500">
+            <a href="dashboard.php?page=create-project&folderId=<?php echo urlencode((string) $folderId); ?>" class="mt-5 inline-flex items-center justify-center gap-2 rounded-lg bg-cta px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-500">
                 <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
                 </svg>

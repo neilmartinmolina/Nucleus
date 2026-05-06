@@ -1,0 +1,9 @@
+[2026-05-05 22:15:21] Monitoring queue started. {"runId":1,"batchSize":2,"force":true}
+[2026-05-05 22:15:21] Monitoring queue selected projects. {"runId":1,"projectIds":[3,4]}
+[2026-05-05 22:15:22] Monitoring queue finished. {"runId":1,"checked":2,"skipped":0,"errors":0,"durationMs":287}
+[2026-05-05 22:15:29] Monitoring cleanup finished. {"retentionDays":30,"deletedChecks":0,"deletedRuns":0}
+[2026-05-05 22:15:40] Monitoring cleanup finished. {"retentionDays":99999,"deletedChecks":0,"deletedRuns":0}
+[2026-05-05 22:15:51] Monitoring queue started. {"runId":2,"batchSize":1,"force":true}
+[2026-05-05 22:15:51] Monitoring queue selected projects. {"runId":2,"projectIds":[3]}
+[2026-05-05 22:15:53] Monitoring queue finished. {"runId":2,"checked":1,"skipped":0,"errors":0,"durationMs":1881}
+[2026-05-05 22:15:53] Monitoring cleanup finished. {"retentionDays":99999,"deletedChecks":0,"deletedRuns":0}

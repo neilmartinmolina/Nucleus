@@ -110,10 +110,17 @@ foreach ($dataStmt->fetchAll() as $project) {
     $statusTitle = htmlspecialchars($project["status_note"] ?? "");
     $responseTime = $project["response_time_ms"] ? htmlspecialchars($project["response_time_ms"] . " ms") : "-";
     $statusSource = htmlspecialchars($project["status_source"] ?? "-");
+    $freshness = monitoringFreshness($project["last_successful_check"] ?? null, $project["remote_updated_at"] ?? null);
+    $uptime = monitoringUptimePercent24h($pdo, $projectId);
+    $uptimeText = $uptime === null ? "No checks" : htmlspecialchars($uptime . "%");
+    $latest = htmlspecialchars($project["check_version"] ?? "-");
+    if (!empty($project["commit_hash"])) {
+        $latest .= " &middot; " . htmlspecialchars(substr($project["commit_hash"], 0, 12));
+    }
 
     $actions = [];
     if ($canUpdate) {
-        $actions[] = "<a href=\"dashboard.php?page=project-form&websiteId={$projectId}\" class=\"px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm transition-colors\">Edit</a>";
+        $actions[] = "<a href=\"dashboard.php?page=create-project&websiteId={$projectId}\" class=\"px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm transition-colors\">Edit</a>";
         $actions[] = "<a href=\"dashboard.php?page=project-details&projectId={$projectId}\" class=\"px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 text-sm transition-colors\">Details</a>";
         if (!empty($project["subject_id"])) {
             $actions[] = "<a href=\"get_content.php?tab=websites&unlist={$projectId}\" data-confirm=\"This removes the project from its subject without deleting it.\" data-confirm-title=\"Unlist this project?\" data-confirm-button=\"Unlist\" data-return-page=\"websites\" class=\"px-3 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 text-sm transition-colors\">Unlist</a>";
@@ -127,7 +134,7 @@ foreach ($dataStmt->fetchAll() as $project) {
         "<span class=\"font-medium text-slate-800\">" . htmlspecialchars($project["project_name"]) . "</span>",
         "<span class=\"text-sm text-slate-600\">" . htmlspecialchars($project["folderName"] ?? "-") . "</span>",
         "<span data-project-status-id=\"{$projectId}\" title=\"{$statusTitle}\" class=\"px-2 py-1 rounded text-sm font-medium badge-{$status}\">" . ucfirst($status) . "</span><div class=\"mt-1 text-xs text-slate-500\">" . htmlspecialchars(deploymentModeLabel($project["deployment_mode"] ?? "hostinger_git")) . "</div>",
-        "<div class=\"text-xs text-slate-500\"><div><span data-status-response-time>{$responseTime}</span> &middot; <span data-status-source>{$statusSource}</span></div><div>Last OK: <span data-last-successful-check>" . htmlspecialchars(formatNucleusDateTime($project["last_successful_check"])) . "</span></div><div>Failures: <span data-consecutive-failures>" . (int) ($project["consecutive_failures"] ?? 0) . "</span></div></div>",
+        "<div class=\"text-xs text-slate-500\"><div class=\"mb-2\"><span data-health-state=\"" . htmlspecialchars($freshness["state"]) . "\" title=\"" . htmlspecialchars($freshness["message"]) . "\" class=\"inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset " . monitoringHealthBadgeClass($freshness["state"]) . "\">" . htmlspecialchars($freshness["label"]) . "</span></div><div><span data-status-response-time>{$responseTime}</span> &middot; <span data-status-source>{$statusSource}</span></div><div>Last OK: <span data-last-successful-check>" . htmlspecialchars(formatNucleusDateTime($project["last_successful_check"])) . "</span></div><div>Failures: <span data-consecutive-failures>" . (int) ($project["consecutive_failures"] ?? 0) . "</span></div><div>Uptime 24h: <span data-uptime-24h>{$uptimeText}</span></div><div>Latest: {$latest}</div></div>",
         "<span class=\"text-sm text-slate-600\">" . htmlspecialchars(displayUpdatedBy($project)) . "</span>",
         "<span class=\"text-sm text-slate-500\">" . htmlspecialchars(formatNucleusDateTime($project["last_updated_at"])) . "</span>",
         "<span class=\"text-sm text-slate-500\">" . htmlspecialchars(formatNucleusDateTime($project["saved_at"] ?? $project["created_at"])) . "</span>",

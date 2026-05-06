@@ -163,17 +163,6 @@ if (!empty($subjectIds)) {
     $folders = $stmt->fetchAll();
 }
 
-$pendingRequests = [];
-if (hasPermission("manage_requests")) {
-    $pendingRequests = $pdo->query("
-        SELECT sr.*, u.fullName AS requesterName
-        FROM subject_requests sr
-        JOIN users u ON u.userId = sr.requested_by
-        WHERE sr.status = 'pending'
-        ORDER BY sr.created_at ASC
-    ")->fetchAll();
-}
-
 $handlers = $pdo->query("
     SELECT u.userId, u.fullName, u.username
     FROM users u
@@ -203,7 +192,7 @@ if (!empty($subjectIds)) {
     <p class="text-sm text-slate-500">Organize projects by academic subject</p>
   </div>
   <?php if (hasPermission("manage_groups")): ?>
-  <a href="#create-subject" class="bg-cta text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-opacity-90 transition-colors flex items-center gap-2">
+  <a href="dashboard.php?page=create-subject" class="bg-cta text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-opacity-90 transition-colors flex items-center gap-2">
     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
     New Subject
   </a>
@@ -214,59 +203,6 @@ if (!empty($subjectIds)) {
   <label for="subjectSearch" class="mb-2 block text-sm font-medium text-slate-700">Search Subjects</label>
   <input id="subjectSearch" type="search" data-subject-search placeholder="Search by code, name, description, creator, or project count" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-cta focus:ring-2 focus:ring-cta/20">
 </div>
-
-<?php if (hasPermission("manage_groups")): ?>
-<div id="create-subject" class="bg-white rounded-xl shadow-sm border border-slate-200 mb-6">
-  <div class="p-6 border-b border-slate-100">
-    <h3 class="text-lg font-semibold text-slate-800">Create New Subject</h3>
-  </div>
-  <div class="p-6">
-    <?php if(isset($error)): ?><div data-feedback="error" data-feedback-title="Subject not saved" data-feedback-message="<?php echo htmlspecialchars($error); ?>" class="mb-4 p-3 rounded-lg bg-red-50 text-red-700 text-sm"><?php echo htmlspecialchars($error); ?></div><?php endif; ?>
-    <?php if(isset($success)): ?><div data-feedback="success" data-feedback-title="Subject saved" data-feedback-message="<?php echo htmlspecialchars($success); ?>" class="mb-4 p-3 rounded-lg bg-green-50 text-green-700 text-sm"><?php echo htmlspecialchars($success); ?></div><?php endif; ?>
-    <form method="POST" action="get_content.php?tab=folders" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
-      <input type="hidden" name="form_action" value="create_subject">
-      <?php if ($pendingRequests): ?>
-      <div class="md:col-span-2">
-        <label class="block text-sm font-medium text-slate-700 mb-1">Create From Request</label>
-        <select name="subject_request_id" id="subjectRequestSelect" class="form-input w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-cta focus:border-cta">
-          <option value="">Manual subject</option>
-          <?php foreach ($pendingRequests as $request): ?>
-          <option value="<?php echo $request["request_id"]; ?>" data-code="<?php echo htmlspecialchars($request["subject_code"]); ?>" data-name="<?php echo htmlspecialchars($request["subject_name"]); ?>" data-description="<?php echo htmlspecialchars($request["description"] ?? ""); ?>">
-            <?php echo htmlspecialchars($request["subject_code"] . " requested by " . $request["requesterName"]); ?>
-          </option>
-          <?php endforeach; ?>
-        </select>
-      </div>
-      <?php endif; ?>
-      <div>
-        <label class="block text-sm font-medium text-slate-700 mb-1">Subject Code *</label>
-        <input type="text" name="folderName" id="subjectCodeInput" class="form-input w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-cta focus:border-cta" placeholder="CC104">
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-slate-700 mb-1">Subject Name</label>
-        <input type="text" name="subjectName" id="subjectNameInput" class="form-input w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-cta focus:border-cta" placeholder="IT Professional Elective 1">
-      </div>
-      <div class="md:col-span-2">
-        <label class="block text-sm font-medium text-slate-700 mb-1">Description</label>
-        <input type="text" name="description" id="subjectDescriptionInput" class="form-input w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-cta focus:border-cta" placeholder="Optional description">
-      </div>
-      <div class="md:col-span-2">
-        <label class="block text-sm font-medium text-slate-700 mb-1">Handlers With Project Access</label>
-        <select name="handlerIds[]" multiple size="4" class="form-input w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-cta focus:border-cta">
-          <?php foreach ($handlers as $handler): ?>
-          <option value="<?php echo $handler["userId"]; ?>"><?php echo htmlspecialchars($handler["fullName"] . " (" . $handler["username"] . ")"); ?></option>
-          <?php endforeach; ?>
-        </select>
-        <p class="mt-1 text-xs text-slate-500">Selected handlers can add, edit, and unlist projects in this subject.</p>
-      </div>
-      <div class="md:col-span-2">
-        <button type="submit" class="bg-cta text-white px-4 py-2 rounded-lg hover:bg-opacity-90 transition-colors">Create Subject</button>
-      </div>
-    </form>
-  </div>
-</div>
-<?php endif; ?>
 
 <div id="subjectGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
   <?php foreach($folders as $f): ?>
@@ -330,21 +266,6 @@ if (!empty($subjectIds)) {
 <div id="subjectEmptyState" class="hidden rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">No subjects match your search.</div>
 
 <script>
-(function() {
-  const select = document.getElementById('subjectRequestSelect');
-  if (!select) return;
-  const code = document.getElementById('subjectCodeInput');
-  const name = document.getElementById('subjectNameInput');
-  const description = document.getElementById('subjectDescriptionInput');
-  select.addEventListener('change', function() {
-    const option = this.selectedOptions[0];
-    if (!option || !option.value) return;
-    code.value = option.dataset.code || '';
-    name.value = option.dataset.name || '';
-    description.value = option.dataset.description || '';
-  });
-})();
-
 (function() {
   const input = document.getElementById('subjectSearch');
   const cards = Array.from(document.querySelectorAll('[data-subject-card]'));

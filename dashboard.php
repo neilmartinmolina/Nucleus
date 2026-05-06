@@ -421,7 +421,7 @@ $dashboardPayload = [
         }
 
         function pageTitles(page) {
-            return { dashboard: 'Dashboard', folders: 'Subjects', websites: 'Projects', 'project-form': 'Project Setup', 'project-details': 'Project Details', usermanagement: 'Users', requests: 'Requests', settings: 'Settings', logs: 'Logs' }[page] || 'Nucleus';
+            return { dashboard: 'Dashboard', folders: 'Subjects', 'view-folder': 'Subject Projects', websites: 'Projects', 'create-subject': 'Create Subject', 'create-project': 'Project Setup', 'project-form': 'Project Setup', 'project-details': 'Project Details', usermanagement: 'Users', 'create-user': 'Create User', 'manage-user': 'Manage User', requests: 'Requests', settings: 'Settings', logs: 'Logs' }[page] || 'Nucleus';
         }
 
         function showFeedback(scope = document) {
@@ -472,6 +472,21 @@ $dashboardPayload = [
                 if (lastSuccess) lastSuccess.textContent = result.displayLastSuccessfulCheck || 'Never';
                 const failures = scope.querySelector('[data-consecutive-failures]');
                 if (failures) failures.textContent = String(result.consecutiveFailures ?? 0);
+                const uptime = scope.querySelector('[data-uptime-24h]');
+                if (uptime) uptime.textContent = result.displayUptimePercent24h || 'No checks';
+                const health = scope.querySelector('[data-health-state]');
+                if (health) {
+                    const state = result.healthState || 'unknown';
+                    health.dataset.healthState = state;
+                    health.textContent = result.healthLabel || 'Unknown';
+                    health.title = result.healthMessage || '';
+                    health.className = 'inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ' + ({
+                        fresh: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20',
+                        stale: 'bg-amber-50 text-amber-700 ring-amber-600/20',
+                        possibly_outdated: 'bg-orange-50 text-orange-700 ring-orange-600/20',
+                        unknown: 'bg-slate-100 text-slate-600 ring-slate-500/20'
+                    }[state] || 'bg-slate-100 text-slate-600 ring-slate-500/20');
+                }
                 const version = scope.querySelector('[data-latest-version]');
                 if (version && result.version) version.textContent = result.version;
                 const commit = scope.querySelector('[data-latest-commit]');
@@ -730,9 +745,18 @@ $dashboardPayload = [
         }
 
         function updateActiveNav(page) {
+            const navPage = {
+                'create-subject': 'folders',
+                'create-project': 'websites',
+                'project-form': 'websites',
+                'project-details': 'websites',
+                'manage-user': 'usermanagement',
+                'create-user': 'usermanagement',
+                'view-folder': 'folders'
+            }[page] || page;
             navLinks.forEach(link => {
                 link.classList.remove('active');
-                if (link.dataset.page === page) link.classList.add('active');
+                if (link.dataset.page === navPage) link.classList.add('active');
             });
         }
 

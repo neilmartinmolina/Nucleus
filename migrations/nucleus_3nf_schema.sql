@@ -121,11 +121,19 @@ CREATE TABLE IF NOT EXISTS project_status (
     last_commit VARCHAR(255) NULL,
     status_note TEXT NULL,
     checked_at TIMESTAMP NULL,
+    last_checked_at TIMESTAMP NULL,
+    last_successful_check_at TIMESTAMP NULL,
+    consecutive_failures INT NOT NULL DEFAULT 0,
+    status_source VARCHAR(50) NULL,
+    response_time_ms INT NULL,
     updated_by INT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (project_id) REFERENCES projects(project_id) ON DELETE CASCADE,
-    FOREIGN KEY (updated_by) REFERENCES users(userId) ON DELETE SET NULL
+    FOREIGN KEY (updated_by) REFERENCES users(userId) ON DELETE SET NULL,
+    INDEX idx_project_status_scheduler (status, last_checked_at, consecutive_failures),
+    INDEX idx_project_status_last_checked (last_checked_at),
+    INDEX idx_project_status_last_success (last_successful_check_at)
 );
 
 CREATE TABLE IF NOT EXISTS deployment_checks (
@@ -145,6 +153,42 @@ CREATE TABLE IF NOT EXISTS deployment_checks (
     INDEX idx_deployment_checks_project_checked (project_id, checked_at),
     INDEX idx_deployment_checks_project_status (project_id, status),
     INDEX idx_deployment_checks_project_status_checked (project_id, status, checked_at)
+);
+
+CREATE TABLE IF NOT EXISTS monitoring_alerts (
+    id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    project_id INT NOT NULL,
+    alert_type VARCHAR(80) NOT NULL,
+    message TEXT NOT NULL,
+    severity ENUM('info', 'warning', 'critical') NOT NULL DEFAULT 'warning',
+    is_resolved TINYINT(1) NOT NULL DEFAULT 0,
+    triggered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    resolved_at TIMESTAMP NULL,
+    FOREIGN KEY (project_id) REFERENCES projects(project_id) ON DELETE CASCADE,
+    INDEX idx_monitoring_alerts_project_resolved (project_id, is_resolved),
+    INDEX idx_monitoring_alerts_type_resolved (alert_type, is_resolved),
+    INDEX idx_monitoring_alerts_triggered (triggered_at)
+);
+
+CREATE TABLE IF NOT EXISTS monitoring_runs (
+    id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    finished_at TIMESTAMP NULL,
+    duration_ms INT NULL,
+    batch_size INT NOT NULL DEFAULT 10,
+    checked_count INT NOT NULL DEFAULT 0,
+    skipped_count INT NOT NULL DEFAULT 0,
+    error_count INT NOT NULL DEFAULT 0,
+    status ENUM('running', 'completed', 'failed', 'skipped') NOT NULL DEFAULT 'running',
+    message TEXT NULL,
+    INDEX idx_monitoring_runs_started (started_at),
+    INDEX idx_monitoring_runs_status_started (status, started_at)
+);
+
+CREATE TABLE IF NOT EXISTS monitoring_settings (
+    setting_key VARCHAR(100) PRIMARY KEY,
+    setting_value VARCHAR(255) NOT NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS project_members (
@@ -262,6 +306,16 @@ FROM roles WHERE role_name = 'handler';
 INSERT IGNORE INTO users (username, passwordHash, fullName, email, role_id)
 SELECT 'visitor', '$2y$12$RAgQ/fV3SmsGP94K0KP/NODu9vXhVNBU9lIad0WPphPqm4JoLgyd.', 'Project Visitor', 'visitor@example.com', role_id
 FROM roles WHERE role_name = 'visitor';
+
+INSERT INTO monitoring_settings (setting_key, setting_value)
+VALUES
+('check_interval_minutes', '5'),
+('stale_after_minutes', '10'),
+('failure_threshold', '3'),
+('batch_size', '10'),
+('response_slow_ms', '3000'),
+('retention_days', '30')
+ON DUPLICATE KEY UPDATE setting_value = setting_value;
 
 INSERT IGNORE INTO subjects (subject_code, subject_name, description, created_by)
 SELECT 'GENERAL', 'General Projects', 'Default subject for uncategorized academic projects.', userId
