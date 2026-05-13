@@ -1,12 +1,24 @@
 <?php
+if (defined("NUCLEUS_CORE_LOADED")) {
+    return;
+}
+if (!defined("NUCLEUS_CORE_BOOTSTRAPPING")) {
+    define("NUCLEUS_CORE_BOOTSTRAPPING", true);
+}
+
 // Common functions and configuration
-require_once __DIR__ . "/../config.php";
+if (!defined("NUCLEUS_CONFIG_BOOTSTRAPPING") && !defined("NUCLEUS_CONFIG_LOADED")) {
+    require_once __DIR__ . "/../config.php";
+}
 require_once __DIR__ . "/db.php";
 require_once __DIR__ . "/Security.php";
 require_once __DIR__ . "/SweetAlert.php";
 require_once __DIR__ . "/csrf.php";
 require_once __DIR__ . "/RoleManager.php";
 require_once __DIR__ . "/monitoring.php";
+require_once __DIR__ . "/Storage/StorageManager.php";
+require_once __DIR__ . "/quota.php";
+require_once __DIR__ . "/DriveStorage.php";
 
 // Secure session settings MUST come before session_start()
 if (function_exists("ini_set")) {
@@ -39,6 +51,19 @@ if ($isAuthenticated && isset($_SESSION["last_activity"])) {
     $inactive = time() - $_SESSION["last_activity"];
     if ($inactive >= SESSION_LIFETIME) {
         session_destroy();
+        $isAjaxRequest = (($_SERVER["HTTP_X_REQUESTED_WITH"] ?? "") === "XMLHttpRequest")
+            || strpos((string) ($_SERVER["HTTP_ACCEPT"] ?? ""), "application/json") !== false;
+        if ($isAjaxRequest) {
+            http_response_code(401);
+            header("X-Nucleus-Auth-Expired: 1");
+            if (strpos((string) ($_SERVER["HTTP_ACCEPT"] ?? ""), "application/json") !== false) {
+                header("Content-Type: application/json");
+                echo json_encode(["success" => false, "message" => "Session expired.", "auth_expired" => true]);
+            } else {
+                echo "<div class=\"p-8 text-center\"><p class=\"text-slate-600\">Session expired. Redirecting to login...</p></div>";
+            }
+            exit;
+        }
         header("Location: login.php?timeout=1");
         exit;
     }
@@ -126,6 +151,154 @@ function ensureProjectSavedAtColumn(PDO $pdo): void {
     }
 }
 
+function ensureResourceFilesSchema(PDO $pdo): void {
+    static $checked = false;
+    if ($checked) {
+        return;
+    }
+    $checked = true;
+
+    try {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS resource_files (
+                resource_file_id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+                project_id INT NOT NULL,
+                uploaded_by INT NOT NULL,
+                storage_driver ENUM('local','ftp') NOT NULL DEFAULT 'local',
+                storage_path VARCHAR(2048) NOT NULL,
+                file_size BIGINT UNSIGNED NOT NULL DEFAULT 0,
+                mime_type VARCHAR(150) NULL,
+                original_filename VARCHAR(255) NOT NULL,
+                stored_filename VARCHAR(255) NOT NULL,
+                is_deleted TINYINT(1) NOT NULL DEFAULT 0,
+                deleted_at TIMESTAMP NULL,
+                deleted_by INT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                FOREIGN KEY (project_id) REFERENCES projects(project_id) ON DELETE CASCADE,
+                FOREIGN KEY (uploaded_by) REFERENCES users(userId) ON DELETE RESTRICT,
+                FOREIGN KEY (deleted_by) REFERENCES users(userId) ON DELETE SET NULL,
+                INDEX idx_resource_files_project_deleted (project_id, is_deleted),
+                INDEX idx_resource_files_uploaded_by (uploaded_by),
+                INDEX idx_resource_files_storage (storage_driver, storage_path(191))
+            )
+        ");
+    } catch (Throwable $e) {
+        error_log("Resource files schema check failed: " . $e->getMessage());
+    }
+}
+
+function ensureFeatureFlagsSchema(PDO $pdo): void {
+    static $checked = false;
+    if ($checked) {
+        return;
+    }
+    $checked = true;
+
+    try {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS feature_flags (
+                id INT PRIMARY KEY AUTO_INCREMENT,
+                feature_key VARCHAR(100) NOT NULL UNIQUE,
+                feature_name VARCHAR(255) NOT NULL,
+                feature_group VARCHAR(100) NULL,
+                is_enabled TINYINT(1) NOT NULL DEFAULT 1,
+                maintenance_message TEXT NULL,
+                updated_by INT NULL,
+                updated_at DATETIME NULL,
+                FOREIGN KEY (updated_by) REFERENCES users(userId) ON DELETE SET NULL,
+                INDEX idx_feature_flags_group (feature_group),
+                INDEX idx_feature_flags_enabled (is_enabled)
+            )
+        ");
+
+        $defaults = [
+            ["dashboard", "Dashboard", "Core"],
+            ["projects", "Projects", "Projects"],
+            ["files", "Files", "Storage"],
+            ["subjects", "Subjects", "Subjects"],
+            ["subject_resources", "Subject Resources", "Subjects"],
+            ["subject_posts", "Subject Posts", "Subjects"],
+            ["tutorials", "Tutorials", "Learning"],
+            ["alerts", "Alerts", "Monitoring"],
+            ["requests", "Requests", "Workflow"],
+            ["logs", "Logs", "Admin"],
+            ["settings", "Settings", "Admin"],
+        ];
+        $stmt = $pdo->prepare("
+            INSERT INTO feature_flags (feature_key, feature_name, feature_group, is_enabled)
+            VALUES (?, ?, ?, 1)
+            ON DUPLICATE KEY UPDATE feature_name = VALUES(feature_name), feature_group = VALUES(feature_group)
+        ");
+        foreach ($defaults as $feature) {
+            $stmt->execute($feature);
+        }
+    } catch (Throwable $e) {
+        error_log("Feature flags schema check failed: " . $e->getMessage());
+    }
+}
+
+function resourceProjectUsageBytes(PDO $pdo, int $projectId): int {
+    $stmt = $pdo->prepare("SELECT COALESCE(SUM(file_size), 0) FROM resource_files WHERE project_id = ? AND is_deleted = 0");
+    $stmt->execute([$projectId]);
+    return (int) $stmt->fetchColumn();
+}
+
+function isAdminLike(): bool {
+    if (!isAuthenticated()) {
+        return false;
+    }
+
+    global $pdo;
+    $roleManager = new RoleManager($pdo);
+    return in_array($roleManager->getUserRole($_SESSION["userId"] ?? null), ["admin", "superadmin"], true);
+}
+
+function getFeatureFlag(string $featureKey): ?array {
+    global $pdo;
+    ensureFeatureFlagsSchema($pdo);
+    $stmt = $pdo->prepare("
+        SELECT ff.*, u.fullName AS updated_by_name
+        FROM feature_flags ff
+        LEFT JOIN users u ON u.userId = ff.updated_by
+        WHERE ff.feature_key = ?
+    ");
+    $stmt->execute([$featureKey]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+function isFeatureEnabled(string $featureKey): bool {
+    $flag = getFeatureFlag($featureKey);
+    return !$flag || (int) $flag["is_enabled"] === 1;
+}
+
+function getFeatureMaintenanceMessage(string $featureKey): string {
+    $flag = getFeatureFlag($featureKey);
+    $message = trim((string) ($flag["maintenance_message"] ?? ""));
+    return $message !== "" ? $message : "Sorry, this part of Nucleus is under construction.";
+}
+
+function shouldBypassMaintenance(): bool {
+    return isAdminLike() && (($_GET["preview"] ?? "") === "1" || ($_GET["bypass_maintenance"] ?? "") === "1");
+}
+
+function renderMaintenanceCard(string $featureKey): void {
+    $message = getFeatureMaintenanceMessage($featureKey);
+    $flag = getFeatureFlag($featureKey);
+    $featureName = $flag["feature_name"] ?? ucwords(str_replace("_", " ", $featureKey));
+    echo "<div class=\"rounded-xl border border-amber-200 bg-amber-50 p-8 text-center shadow-sm\">";
+    echo "<p class=\"text-sm font-semibold uppercase text-amber-700\">Maintenance</p>";
+    echo "<h2 class=\"mt-2 text-2xl font-bold text-slate-800\">" . htmlspecialchars($featureName) . "</h2>";
+    echo "<p class=\"mx-auto mt-3 max-w-xl text-sm leading-6 text-amber-800\">" . htmlspecialchars($message) . "</p>";
+    if (isAdminLike()) {
+        $params = $_GET;
+        $params["preview"] = "1";
+        echo "<a href=\"dashboard.php?" . htmlspecialchars(http_build_query($params)) . "\" class=\"mt-5 inline-flex rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white\">Preview as admin</a>";
+    }
+    echo "</div>";
+}
+
 function displayUpdatedBy(array $row) {
     $role = $_SESSION["role"] ?? "visitor";
     if (!in_array($role, ["admin", "handler"], true)) {
@@ -184,7 +357,7 @@ $isIndexPhp = ($currentFile === "index.php");
 $isLoginPage = ($currentFile === "login.php" || $currentFile === "signup.php" || $currentFile === "password_reset.php" || $currentFile === "password_reset_complete.php");
 $isPublicEndpoint = ($currentFile === "webhook.php" || $currentFile === "github-webhook.php");
 
-if (!defined("NUCLEUS_SKIP_SESSION_BOOTSTRAP") && !$isIndexPhp && !$isLoginPage && !$isPublicEndpoint) {
+if (!defined("NUCLEUS_SKIP_SESSION_BOOTSTRAP") && !defined("NUCLEUS_SKIP_DIRECT_ACCESS_REDIRECT") && !$isIndexPhp && !$isLoginPage && !$isPublicEndpoint) {
     // Direct file access - redirect to index.php routing
     if (!isAuthenticated()) {
         header("Location: index.php?page=login");
@@ -193,3 +366,9 @@ if (!defined("NUCLEUS_SKIP_SESSION_BOOTSTRAP") && !$isIndexPhp && !$isLoginPage 
 }
 
 ensureProjectSavedAtColumn($pdo);
+ensureResourceFilesSchema($pdo);
+ensureFeatureFlagsSchema($pdo);
+
+if (!defined("NUCLEUS_CORE_LOADED")) {
+    define("NUCLEUS_CORE_LOADED", true);
+}

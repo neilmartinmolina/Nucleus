@@ -5,6 +5,7 @@ use GuzzleHttp\Exception\GuzzleException;
 
 const NUCLEUS_MONITORING_DEFAULT_STALE_MINUTES = 10;
 const NUCLEUS_MONITORING_DEFAULT_BATCH_SIZE = 10;
+const NUCLEUS_MONITORING_DEFAULT_SCHEDULER_MODE = "manual";
 
 function monitoringStaleMinutes(): int
 {
@@ -45,6 +46,7 @@ function monitoringSettings(PDO $pdo): array
     }
 
     $defaults = [
+        "scheduler_mode" => NUCLEUS_MONITORING_DEFAULT_SCHEDULER_MODE,
         "check_interval_minutes" => 5,
         "stale_after_minutes" => 10,
         "failure_threshold" => 3,
@@ -56,7 +58,9 @@ function monitoringSettings(PDO $pdo): array
     try {
         $rows = $pdo->query("SELECT setting_key, setting_value FROM monitoring_settings")->fetchAll();
         foreach ($rows as $row) {
-            if (array_key_exists($row["setting_key"], $defaults)) {
+            if ($row["setting_key"] === "scheduler_mode") {
+                $defaults["scheduler_mode"] = monitoringNormalizeSchedulerMode((string) $row["setting_value"]);
+            } elseif (array_key_exists($row["setting_key"], $defaults)) {
                 $defaults[$row["setting_key"]] = (int) $row["setting_value"];
             }
         }
@@ -66,6 +70,43 @@ function monitoringSettings(PDO $pdo): array
 
     $settings = $defaults;
     return $settings;
+}
+
+function monitoringSchedulerModes(): array
+{
+    return [
+        "manual" => [
+            "label" => "Manual",
+            "description" => "Only administrators start the global monitoring queue with the manual fallback run.",
+        ],
+        "browser_demo" => [
+            "label" => "Browser demo",
+            "description" => "An admin dashboard tab may trigger the queue on a browser timer. The manual fallback remains available.",
+        ],
+        "external_cron" => [
+            "label" => "External cron",
+            "description" => "A server cron or Windows Task Scheduler job runs the queue. The browser does not start timer runs.",
+        ],
+    ];
+}
+
+function monitoringNormalizeSchedulerMode(string $mode): string
+{
+    $mode = strtolower(trim($mode));
+    return array_key_exists($mode, monitoringSchedulerModes()) ? $mode : NUCLEUS_MONITORING_DEFAULT_SCHEDULER_MODE;
+}
+
+function monitoringCronCommand(array $settings = []): string
+{
+    $batchSize = max(1, min((int) ($settings["batch_size"] ?? NUCLEUS_MONITORING_DEFAULT_BATCH_SIZE), 100));
+    return "php handlers/run_monitoring_queue.php batch=" . $batchSize;
+}
+
+function monitoringFailureThreshold(PDO $pdo): int
+{
+    $settings = monitoringSettings($pdo);
+    $threshold = (int) ($settings["failure_threshold"] ?? 3);
+    return $threshold > 0 ? $threshold : 3;
 }
 
 function monitoringStartRun(PDO $pdo, int $batchSize): int
@@ -273,6 +314,211 @@ function monitoringUptimePercent24h(PDO $pdo, int $projectId): ?float
     }
 
     return round(((int) ($row["healthy_checks"] ?? 0) / $total) * 100, 1);
+}
+
+function monitoringUptimePercent(PDO $pdo, int $projectId, string $window = "24h"): ?float
+{
+    $interval = $window === "7d" ? "7 DAY" : "24 HOUR";
+    $stmt = $pdo->prepare("
+        SELECT COUNT(*) AS total_checks,
+               SUM(CASE WHEN status = 'deployed' THEN 1 ELSE 0 END) AS healthy_checks
+        FROM deployment_checks
+        WHERE project_id = ? AND checked_at >= DATE_SUB(NOW(), INTERVAL {$interval})
+    ");
+    $stmt->execute([$projectId]);
+    $row = $stmt->fetch();
+    $total = (int) ($row["total_checks"] ?? 0);
+    if ($total === 0) {
+        return null;
+    }
+
+    return round(((int) ($row["healthy_checks"] ?? 0) / $total) * 100, 1);
+}
+
+function monitoringUnresolvedAlertCount(PDO $pdo, int $projectId): int
+{
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM monitoring_alerts WHERE project_id = ? AND is_resolved = 0");
+    $stmt->execute([$projectId]);
+    return (int) $stmt->fetchColumn();
+}
+
+function monitoringAverageResponseMs(PDO $pdo, int $projectId, string $window = "24h"): ?int
+{
+    $interval = $window === "7d" ? "7 DAY" : "24 HOUR";
+    $stmt = $pdo->prepare("
+        SELECT AVG(response_time_ms)
+        FROM deployment_checks
+        WHERE project_id = ?
+          AND response_time_ms IS NOT NULL
+          AND checked_at >= DATE_SUB(NOW(), INTERVAL {$interval})
+    ");
+    $stmt->execute([$projectId]);
+    $average = $stmt->fetchColumn();
+    return $average === null ? null : (int) round((float) $average);
+}
+
+function monitoringHealthScore(PDO $pdo, int $projectId, ?array $snapshot = null): array
+{
+    $settings = monitoringSettings($pdo);
+    $slowMs = max(1, (int) ($settings["response_slow_ms"] ?? 3000));
+    $snapshot = $snapshot ?? monitoringProjectSnapshot($pdo, $projectId);
+    $uptime = monitoringUptimePercent($pdo, $projectId, "24h");
+    $avgResponse = monitoringAverageResponseMs($pdo, $projectId, "24h");
+    $failures = (int) ($snapshot["consecutiveFailures"] ?? 0);
+    $freshness = $snapshot["freshness"]["state"] ?? "unknown";
+    $unresolvedAlerts = monitoringUnresolvedAlertCount($pdo, $projectId);
+
+    $score = $uptime === null ? 70 : (float) $uptime;
+    $score -= min(30, $failures * 8);
+    if (in_array($freshness, ["stale", "possibly_outdated"], true)) {
+        $score -= 15;
+    } elseif ($freshness === "unknown") {
+        $score -= 10;
+    }
+    if ($avgResponse !== null && $avgResponse > $slowMs) {
+        $score -= min(20, (int) ceil((($avgResponse - $slowMs) / $slowMs) * 20));
+    }
+    $score -= min(20, $unresolvedAlerts * 5);
+    $score = max(0, min(100, (int) round($score)));
+
+    if ($score >= 90) {
+        $label = "Excellent";
+        $state = "excellent";
+    } elseif ($score >= 75) {
+        $label = "Healthy";
+        $state = "healthy";
+    } elseif ($score >= 50) {
+        $label = "Warning";
+        $state = "warning";
+    } else {
+        $label = "Critical";
+        $state = "critical";
+    }
+
+    return [
+        "score" => $score,
+        "label" => $label,
+        "state" => $state,
+        "uptime" => $uptime,
+        "averageResponseMs" => $avgResponse,
+        "consecutiveFailures" => $failures,
+        "freshnessState" => $freshness,
+        "unresolvedAlerts" => $unresolvedAlerts,
+        "slowResponseMs" => $slowMs,
+    ];
+}
+
+function monitoringHealthScoreBadgeClass(string $state): string
+{
+    return [
+        "excellent" => "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
+        "healthy" => "bg-sky-50 text-sky-700 ring-sky-600/20",
+        "warning" => "bg-amber-50 text-amber-700 ring-amber-600/20",
+        "critical" => "bg-red-50 text-red-700 ring-red-600/20",
+    ][$state] ?? "bg-slate-100 text-slate-600 ring-slate-500/20";
+}
+
+function monitoringStatusBadgeClass(string $status): string
+{
+    return [
+        "initializing" => "bg-sky-50 text-sky-700 ring-sky-600/20",
+        "building" => "bg-indigo-50 text-indigo-700 ring-indigo-600/20",
+        "deployed" => "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
+        "warning" => "bg-amber-50 text-amber-700 ring-amber-600/20",
+        "error" => "bg-red-50 text-red-700 ring-red-600/20",
+        "recovered" => "bg-teal-50 text-teal-700 ring-teal-600/20",
+    ][$status] ?? "bg-slate-100 text-slate-600 ring-slate-500/20";
+}
+
+function monitoringSeverityBadgeClass(string $severity): string
+{
+    return [
+        "info" => "bg-sky-50 text-sky-700 ring-sky-600/20",
+        "warning" => "bg-amber-50 text-amber-700 ring-amber-600/20",
+        "critical" => "bg-red-50 text-red-700 ring-red-600/20",
+    ][$severity] ?? "bg-slate-100 text-slate-600 ring-slate-500/20";
+}
+
+function monitoringTransitionLabel(?string $previous, string $current): string
+{
+    if ($current === "deployed" && in_array($previous, ["warning", "error"], true)) {
+        return "recovered";
+    }
+
+    return $current;
+}
+
+function monitoringStatusTimeline(PDO $pdo, int $projectId, string $window = "24h"): array
+{
+    $interval = $window === "7d" ? "7 DAY" : "24 HOUR";
+    $stmt = $pdo->prepare("
+        SELECT id, status, checked_at, response_time_ms, error_message
+        FROM deployment_checks
+        WHERE project_id = ?
+          AND checked_at >= DATE_SUB(NOW(), INTERVAL {$interval})
+        ORDER BY checked_at ASC, id ASC
+    ");
+    $stmt->execute([$projectId]);
+    $rows = $stmt->fetchAll();
+    $events = [];
+    $previousStatus = null;
+    $previousAt = null;
+
+    foreach ($rows as $row) {
+        $checkedAt = (string) $row["checked_at"];
+        $durationSeconds = $previousAt ? max(0, strtotime($checkedAt) - strtotime($previousAt)) : null;
+        $timelineStatus = monitoringTransitionLabel($previousStatus, (string) $row["status"]);
+        $events[] = [
+            "id" => (int) $row["id"],
+            "status" => $timelineStatus,
+            "rawStatus" => (string) $row["status"],
+            "checkedAt" => $checkedAt,
+            "displayCheckedAt" => formatNucleusDateTime($checkedAt),
+            "durationSeconds" => $durationSeconds,
+            "displayDuration" => $durationSeconds === null ? "First check" : monitoringFormatDuration($durationSeconds),
+            "responseTimeMs" => $row["response_time_ms"] === null ? null : (int) $row["response_time_ms"],
+            "message" => $row["error_message"] ?: ($timelineStatus === "recovered" ? "Recovered after an unhealthy check." : "Monitoring check recorded."),
+        ];
+        $previousStatus = (string) $row["status"];
+        $previousAt = $checkedAt;
+    }
+
+    return $events;
+}
+
+function monitoringFormatDuration(int $seconds): string
+{
+    if ($seconds < 60) {
+        return $seconds . "s";
+    }
+    if ($seconds < 3600) {
+        return (int) floor($seconds / 60) . "m";
+    }
+    if ($seconds < 86400) {
+        return (int) floor($seconds / 3600) . "h " . (int) floor(($seconds % 3600) / 60) . "m";
+    }
+    return (int) floor($seconds / 86400) . "d";
+}
+
+function monitoringLockState(): array
+{
+    $lockPath = monitoringStoragePath("locks/monitoring.lock");
+    if (!file_exists($lockPath) || trim((string) @file_get_contents($lockPath)) === "") {
+        return ["state" => "idle", "label" => "Idle", "message" => "No active queue lock."];
+    }
+
+    $raw = trim((string) @file_get_contents($lockPath));
+    $metadata = json_decode($raw, true);
+    $started = is_array($metadata) ? ($metadata["started_at"] ?? null) : null;
+    $age = $started ? max(0, time() - strtotime((string) $started)) : null;
+    $stale = $age !== null && $age > 900;
+
+    return [
+        "state" => $stale ? "stale" : "running",
+        "label" => $stale ? "Stale lock" : "Running",
+        "message" => $age === null ? "Lock file is present." : "Lock age: " . monitoringFormatDuration($age),
+        "metadata" => is_array($metadata) ? $metadata : [],
+    ];
 }
 
 function monitoringFreshness(?string $lastSuccessfulCheck, ?string $remoteUpdatedAt, int $staleMinutes = null): array
@@ -497,6 +743,7 @@ function monitoringApplyAlerts(PDO $pdo, int $projectId, array $check, array $fr
 function monitoringRunProjectCheck(PDO $pdo, array $project): array
 {
     $projectId = (int) $project["project_id"];
+    $failureThreshold = monitoringFailureThreshold($pdo);
     $previous = monitoringLatestCheck($pdo, $projectId);
     $check = null;
     $lastError = "No status endpoint configured";
@@ -550,13 +797,13 @@ function monitoringRunProjectCheck(PDO $pdo, array $project): array
         }
 
         $failureCount = monitoringConsecutiveFailures($pdo, $projectId) + 1;
-        $status = $failureCount >= 3 ? "error" : "warning";
+        $status = $failureCount >= $failureThreshold ? "error" : "warning";
         $check = [
             "status" => $status,
             "http_code" => $response["statusCode"],
             "response_time_ms" => $response["responseTimeMs"],
             "status_source" => "http_only",
-            "message" => $status === "warning" ? "Homepage failed health check once." : "Homepage failed 3 checks in a row.",
+            "message" => $status === "warning" ? "Homepage failed health check." : "Homepage failed {$failureThreshold} checks in a row.",
             "error_message" => $hasBody ? $response["error"] : ($response["ok"] ? "Homepage returned an empty response" : $response["error"]),
         ];
         break;
@@ -565,7 +812,7 @@ function monitoringRunProjectCheck(PDO $pdo, array $project): array
     if ($check === null) {
         $failureCount = monitoringConsecutiveFailures($pdo, $projectId) + 1;
         $check = [
-            "status" => $failureCount >= 3 ? "error" : "warning",
+            "status" => $failureCount >= $failureThreshold ? "error" : "warning",
             "http_code" => null,
             "response_time_ms" => null,
             "status_source" => "none",
@@ -576,11 +823,11 @@ function monitoringRunProjectCheck(PDO $pdo, array $project): array
 
     if (in_array($check["status"], ["warning", "error"], true)) {
         $failureCount = monitoringConsecutiveFailures($pdo, $projectId) + 1;
-        $check["status"] = $failureCount >= 3 ? "error" : "warning";
-        if ($failureCount < 3) {
+        $check["status"] = $failureCount >= $failureThreshold ? "error" : "warning";
+        if ($failureCount < $failureThreshold) {
             $check["message"] = $check["message"] ?? "Monitoring check failed.";
         } else {
-            $check["message"] = $check["message"] ?? "Monitoring check failed 3 checks in a row.";
+            $check["message"] = $check["message"] ?? "Monitoring check failed {$failureThreshold} checks in a row.";
         }
     }
 
@@ -628,20 +875,32 @@ function monitoringSelectProjectsForQueue(PDO $pdo, int $batchSize, bool $force 
                COALESCE(ps.consecutive_failures, 0) AS consecutive_failures,
                ps.response_time_ms,
                (
-                    CASE WHEN ps.status = 'error' THEN 100 ELSE 0 END
-                  + CASE WHEN ps.status = 'warning' THEN 70 ELSE 0 END
-                  + CASE WHEN ps.last_successful_check_at IS NULL OR ps.last_successful_check_at <= DATE_SUB(NOW(), INTERVAL {$staleAfter} MINUTE) THEN 50 ELSE 0 END
-                  + CASE WHEN ps.last_checked_at IS NULL THEN 40 ELSE 0 END
-                  + CASE WHEN COALESCE(ps.consecutive_failures, 0) > 0 THEN 30 ELSE 0 END
+                    CASE
+                        WHEN ps.status = 'error' THEN 1
+                        WHEN ps.status = 'warning' THEN 2
+                        WHEN COALESCE(ps.consecutive_failures, 0) > 0 THEN 3
+                        WHEN ps.last_successful_check_at IS NOT NULL
+                             AND ps.last_successful_check_at <= DATE_SUB(NOW(), INTERVAL {$staleAfter} MINUTE) THEN 4
+                        WHEN ps.last_checked_at IS NULL THEN 5
+                        ELSE 6
+                    END
+               ) AS priority_tier,
+               (
+                    CASE WHEN ps.status = 'error' THEN 900 ELSE 0 END
+                  + CASE WHEN ps.status = 'warning' THEN 800 ELSE 0 END
+                  + CASE WHEN COALESCE(ps.consecutive_failures, 0) > 0 THEN 700 ELSE 0 END
+                  + CASE WHEN ps.last_successful_check_at IS NOT NULL
+                           AND ps.last_successful_check_at <= DATE_SUB(NOW(), INTERVAL {$staleAfter} MINUTE) THEN 600 ELSE 0 END
+                  + CASE WHEN ps.last_checked_at IS NULL THEN 500 ELSE 0 END
                   + CASE WHEN COALESCE(ps.response_time_ms, 0) > {$responseSlowMs} THEN 20 ELSE 0 END
-                  + COALESCE(TIMESTAMPDIFF(MINUTE, ps.last_checked_at, NOW()), 100000)
+                  + LEAST(COALESCE(TIMESTAMPDIFF(MINUTE, ps.last_checked_at, NOW()), 0), 1440)
                ) AS priority_score
         FROM projects p
         LEFT JOIN project_status ps ON ps.project_id = p.project_id
         WHERE p.public_url IS NOT NULL
           AND p.public_url <> ''
           AND {$eligibility}
-        ORDER BY priority_score DESC, ps.last_checked_at ASC, p.project_id ASC
+        ORDER BY priority_tier ASC, priority_score DESC, ps.last_checked_at ASC, p.project_id ASC
         LIMIT {$batchSize}
     ");
     $stmt->execute();

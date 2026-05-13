@@ -60,6 +60,7 @@ CREATE TABLE IF NOT EXISTS monitoring_settings (
 
 INSERT INTO monitoring_settings (setting_key, setting_value)
 VALUES
+    ('scheduler_mode', 'manual'),
     ('check_interval_minutes', '5'),
     ('stale_after_minutes', '10'),
     ('failure_threshold', '3'),

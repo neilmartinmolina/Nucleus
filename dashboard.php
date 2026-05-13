@@ -19,6 +19,17 @@ $stmt->execute([$userId]);
 $currentUser = $stmt->fetch();
 generateCSRFToken();
 
+$navFeatures = [
+    "dashboard" => isFeatureEnabled("dashboard"),
+    "folders" => isFeatureEnabled("subjects"),
+    "websites" => isFeatureEnabled("projects"),
+    "files" => isFeatureEnabled("files"),
+    "requests" => isFeatureEnabled("requests"),
+    "settings" => isFeatureEnabled("settings"),
+    "alerts" => isFeatureEnabled("alerts"),
+    "logs" => isFeatureEnabled("logs"),
+];
+
 $dashboardPayload = [
     "dataTables" => [
         ["selector" => "#recentActivityTable", "order" => [[2, "desc"]], "disabledTargets" => [], "placeholder" => "Search activity..."],
@@ -29,6 +40,7 @@ $dashboardPayload = [
         ["selector" => "#subjectRequestsTable", "order" => [[4, "desc"]], "disabledTargets" => [], "placeholder" => "Search subject requests..."],
         ["selector" => "#activityLogsTable", "order" => [[5, "desc"]], "disabledTargets" => [], "placeholder" => "Search logs..."],
         ["selector" => "#projectChecksTable", "order" => [[0, "desc"]], "disabledTargets" => [], "placeholder" => "Search checks..."],
+        ["selector" => "#alertsTable", "order" => [[6, "desc"]], "disabledTargets" => [0], "placeholder" => "Search alerts..."],
     ],
 ];
 ?>
@@ -38,21 +50,9 @@ $dashboardPayload = [
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Nucleus | Dashboard</title>
+    <script src="tailwind.config.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdn.datatables.net/2.3.8/css/dataTables.tailwindcss.min.css">
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        navy: '#043873',
-                        accent: '#FFE492',
-                        cta: '#4F9CF9'
-                    }
-                }
-            }
-        }
-    </script>
     <style>
         .nav-item.active {
             background-color: rgba(4, 56, 115, 0.1);
@@ -239,34 +239,56 @@ $dashboardPayload = [
 
             <!-- Nav Links -->
             <nav class="flex-1 py-6 px-3 space-y-1">
-                <a href="?page=dashboard" class="nav-item active block px-4 py-3 rounded-lg text-slate-600 hover:bg-slate-50 hover:text-navy transition relative" data-page="dashboard">
+                <?php if ($navFeatures["dashboard"] || isAdminLike()): ?>
+                <a href="?page=dashboard" class="nav-item active block px-4 py-3 rounded-lg text-slate-600 hover:bg-slate-50 hover:text-navy transition relative <?php echo $navFeatures["dashboard"] ? "" : "opacity-60"; ?>" data-page="dashboard">
                     <svg class="w-5 h-5 inline-block mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>
                     Dashboard
                 </a>
-                <a href="?page=folders" class="nav-item block px-4 py-3 rounded-lg text-slate-600 hover:bg-slate-50 hover:text-navy transition relative" data-page="folders">
+                <?php endif; ?>
+                <?php if ($navFeatures["folders"] || isAdminLike()): ?>
+                <a href="?page=folders" class="nav-item block px-4 py-3 rounded-lg text-slate-600 hover:bg-slate-50 hover:text-navy transition relative <?php echo $navFeatures["folders"] ? "" : "opacity-60"; ?>" data-page="folders">
                     <svg class="w-5 h-5 inline-block mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>
                     Subjects
                 </a>
-                <a href="?page=websites" class="nav-item block px-4 py-3 rounded-lg text-slate-600 hover:bg-slate-50 hover:text-navy transition relative" data-page="websites">
+                <?php endif; ?>
+                <?php if ($navFeatures["websites"] || isAdminLike()): ?>
+                <a href="?page=websites" class="nav-item block px-4 py-3 rounded-lg text-slate-600 hover:bg-slate-50 hover:text-navy transition relative <?php echo $navFeatures["websites"] ? "" : "opacity-60"; ?>" data-page="websites">
                     <svg class="w-5 h-5 inline-block mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"></path></svg>
                     Projects
                 </a>
+                <?php endif; ?>
+                <?php if ($navFeatures["files"] || isAdminLike()): ?>
+                <a href="?page=files" class="nav-item block px-4 py-3 rounded-lg text-slate-600 hover:bg-slate-50 hover:text-navy transition relative <?php echo $navFeatures["files"] ? "" : "opacity-60"; ?>" data-page="files">
+                    <svg class="w-5 h-5 inline-block mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7a2 2 0 012-2h5l2 2h7a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"></path></svg>
+                    Files
+                </a>
+                <?php endif; ?>
                 <?php if (hasPermission("manage_users")): ?>
                 <a href="?page=usermanagement" class="nav-item block px-4 py-3 rounded-lg text-slate-600 hover:bg-slate-50 hover:text-navy transition relative" data-page="usermanagement">
                     <svg class="w-5 h-5 inline-block mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
                     Users
                 </a>
                 <?php endif; ?>
-                <a href="?page=requests" class="nav-item block px-4 py-3 rounded-lg text-slate-600 hover:bg-slate-50 hover:text-navy transition relative" data-page="requests">
+                <?php if ($navFeatures["requests"] || isAdminLike()): ?>
+                <a href="?page=requests" class="nav-item block px-4 py-3 rounded-lg text-slate-600 hover:bg-slate-50 hover:text-navy transition relative <?php echo $navFeatures["requests"] ? "" : "opacity-60"; ?>" data-page="requests">
                     <svg class="w-5 h-5 inline-block mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h8M8 14h5m8-2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                     Requests
                 </a>
-                <a href="?page=settings" class="nav-item block px-4 py-3 rounded-lg text-slate-600 hover:bg-slate-50 hover:text-navy transition relative" data-page="settings">
+                <?php endif; ?>
+                <?php if ($navFeatures["settings"] || isAdminLike()): ?>
+                <a href="?page=settings" class="nav-item block px-4 py-3 rounded-lg text-slate-600 hover:bg-slate-50 hover:text-navy transition relative <?php echo $navFeatures["settings"] ? "" : "opacity-60"; ?>" data-page="settings">
                     <svg class="w-5 h-5 inline-block mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.607 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
                     Settings
                 </a>
-                <?php if (hasPermission("view_activity_logs")): ?>
-                <a href="?page=logs" class="nav-item block px-4 py-3 rounded-lg text-slate-600 hover:bg-slate-50 hover:text-navy transition relative" data-page="logs">
+                <?php endif; ?>
+                <?php if ($navFeatures["alerts"] || isAdminLike()): ?>
+                <a href="?page=alerts" class="nav-item block px-4 py-3 rounded-lg text-slate-600 hover:bg-slate-50 hover:text-navy transition relative <?php echo $navFeatures["alerts"] ? "" : "opacity-60"; ?>" data-page="alerts">
+                    <svg class="w-5 h-5 inline-block mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"></path></svg>
+                    Alerts
+                </a>
+                <?php endif; ?>
+                <?php if (hasPermission("view_activity_logs") && ($navFeatures["logs"] || isAdminLike())): ?>
+                <a href="?page=logs" class="nav-item block px-4 py-3 rounded-lg text-slate-600 hover:bg-slate-50 hover:text-navy transition relative <?php echo $navFeatures["logs"] ? "" : "opacity-60"; ?>" data-page="logs">
                     <svg class="w-5 h-5 inline-block mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
                     Logs
                 </a>
@@ -421,7 +443,7 @@ $dashboardPayload = [
         }
 
         function pageTitles(page) {
-            return { dashboard: 'Dashboard', folders: 'Subjects', 'view-folder': 'Subject Projects', websites: 'Projects', 'create-subject': 'Create Subject', 'create-project': 'Project Setup', 'project-form': 'Project Setup', 'project-details': 'Project Details', usermanagement: 'Users', 'create-user': 'Create User', 'manage-user': 'Manage User', requests: 'Requests', settings: 'Settings', logs: 'Logs' }[page] || 'Nucleus';
+            return { dashboard: 'Dashboard', folders: 'Subjects', 'view-folder': 'Subject Projects', websites: 'Projects', files: 'Files', 'create-subject': 'Create Subject', 'create-project': 'Project Setup', 'project-form': 'Project Setup', 'project-details': 'Project Details', usermanagement: 'Users', 'create-user': 'Create User', 'manage-user': 'Manage User', requests: 'Requests', settings: 'Settings', alerts: 'Alert Center', logs: 'Logs' }[page] || 'Nucleus';
         }
 
         function showFeedback(scope = document) {
@@ -436,9 +458,27 @@ $dashboardPayload = [
             });
         }
 
+        function redirectToLoginTimeout() {
+            stopLiveStatusUpdates();
+            stopMonitoringBrowserScheduler();
+            window.location.href = 'login.php?timeout=1';
+        }
+
+        function ensureAuthenticatedResponse(response) {
+            const redirectedToLogin = response.redirected && response.url && response.url.includes('login.php');
+            if (response.status === 401 || response.headers.get('X-Nucleus-Auth-Expired') === '1' || redirectedToLogin) {
+                redirectToLoginTimeout();
+                throw new Error('Session expired.');
+            }
+            return response;
+        }
+
         let statusPollTimer = null;
         let statusPollFirstRun = null;
         let statusPollStartTimer = null;
+        let monitoringSchedulerTimer = null;
+        let monitoringSchedulerRunning = false;
+        const monitoringSchedulerLastRunKey = 'nucleus.monitoring.browserDemo.lastRunMs';
 
         function statusBadgeClasses(status, compact = false) {
             if (compact) {
@@ -555,6 +595,7 @@ $dashboardPayload = [
                         const response = await fetch('handlers/check_project_status.php?projectId=' + encodeURIComponent(projectId), {
                             headers: { 'Accept': 'application/json' }
                         });
+                        ensureAuthenticatedResponse(response);
                         const result = await response.json();
                         if (!result.success) return;
                         scope.querySelectorAll(`[data-project-status-id="${CSS.escape(projectId)}"]`).forEach(badge => applyProjectStatus(badge, result));
@@ -603,6 +644,108 @@ $dashboardPayload = [
             }
         }
 
+        function stopMonitoringBrowserScheduler() {
+            if (monitoringSchedulerTimer) {
+                clearInterval(monitoringSchedulerTimer);
+                monitoringSchedulerTimer = null;
+            }
+            monitoringSchedulerRunning = false;
+        }
+
+        async function runMonitoringNow(options = {}) {
+            const silent = !!options.silent;
+            const button = options.button || null;
+            const originalText = button ? button.textContent : '';
+            if (button) {
+                button.disabled = true;
+                button.textContent = 'Running...';
+            }
+
+            try {
+                const response = await fetch('handlers/run_monitoring_now.php', {
+                    method: 'POST',
+                    headers: { 'Accept': 'application/json' }
+                });
+                ensureAuthenticatedResponse(response);
+                const result = await response.json();
+                if (result.success) {
+                    await refreshProjectStatuses(contentEl);
+                    if (!silent) {
+                        await Swal.fire({
+                            icon: 'success',
+                            title: 'Monitoring complete',
+                            text: result.message || `Checked ${result.checked_count || 0} projects.`,
+                            confirmButtonColor: '#3085d6'
+                        });
+                        await reloadDashboardPage(new URLSearchParams(window.location.search).get('page') || 'dashboard');
+                    }
+                    return result;
+                }
+
+                if (!silent) {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Monitoring failed',
+                        text: result.message || 'The monitoring queue could not be started.',
+                        confirmButtonColor: '#3085d6'
+                    });
+                } else {
+                    console.debug('Browser demo monitoring run failed', result.message || result);
+                }
+                return result;
+            } catch (err) {
+                if (!silent) {
+                    Swal.fire({ icon: 'error', title: 'Request failed', text: err.message, confirmButtonColor: '#3085d6' });
+                } else {
+                    console.debug('Browser demo monitoring request failed', err);
+                }
+                return { success: false, message: err.message };
+            } finally {
+                if (button) {
+                    button.disabled = false;
+                    button.textContent = originalText;
+                }
+            }
+        }
+
+        function initMonitoringBrowserScheduler(scope = contentEl) {
+            stopMonitoringBrowserScheduler();
+            const scheduler = scope.querySelector('[data-monitoring-scheduler]');
+            if (!scheduler || scheduler.dataset.schedulerMode !== 'browser_demo' || scheduler.dataset.canRunMonitoring !== '1') {
+                return;
+            }
+
+            const intervalMinutes = Math.max(1, parseInt(scheduler.dataset.monitoringIntervalMinutes || '5', 10));
+            const intervalMs = intervalMinutes * 60 * 1000;
+            const serverLastRunMs = parseInt(scheduler.dataset.monitoringLastRunMs || '0', 10) || 0;
+            const storedLastRunMs = parseInt(localStorage.getItem(monitoringSchedulerLastRunKey) || '0', 10) || 0;
+            if (serverLastRunMs > storedLastRunMs) {
+                localStorage.setItem(monitoringSchedulerLastRunKey, String(serverLastRunMs));
+            }
+
+            async function tick() {
+                if (monitoringSchedulerRunning) return;
+                if ((scheduler.dataset.monitoringLockState || '') === 'running') return;
+
+                const lastRunMs = parseInt(localStorage.getItem(monitoringSchedulerLastRunKey) || '0', 10) || 0;
+                if (Date.now() - lastRunMs < intervalMs) return;
+
+                monitoringSchedulerRunning = true;
+                localStorage.setItem(monitoringSchedulerLastRunKey, String(Date.now()));
+                try {
+                    const result = await runMonitoringNow({ silent: true });
+                    if (result && result.success) {
+                        scheduler.dataset.monitoringLastRunMs = String(Date.now());
+                    }
+                } finally {
+                    monitoringSchedulerRunning = false;
+                }
+            }
+
+            monitoringSchedulerTimer = setInterval(tick, Math.min(intervalMs, 60000));
+            setTimeout(tick, 5000);
+        }
+
         async function refreshProjectStatuses(scope = contentEl) {
             const badges = Array.from(scope.querySelectorAll('[data-project-status-id]'));
             const projectIds = Array.from(new Set(badges.map(badge => badge.dataset.projectStatusId).filter(Boolean)));
@@ -624,6 +767,7 @@ $dashboardPayload = [
                     const response = await fetch('handlers/check_project_status.php?projectId=' + encodeURIComponent(projectId), {
                         headers: { 'Accept': 'application/json' }
                     });
+                    ensureAuthenticatedResponse(response);
                     const result = await response.json();
                     if (!result.success) return;
                     scope.querySelectorAll(`[data-project-status-id="${CSS.escape(projectId)}"]`).forEach(badge => applyProjectStatus(badge, result));
@@ -635,6 +779,7 @@ $dashboardPayload = [
 
         function showPageLoading(page) {
             stopLiveStatusUpdates();
+            stopMonitoringBrowserScheduler();
             titleEl.textContent = pageTitles(page);
             contentEl.innerHTML = `
                 <div class="space-y-6" aria-live="polite" aria-busy="true">
@@ -669,6 +814,7 @@ $dashboardPayload = [
             titleEl.textContent = pageTitles(page);
             showFeedback(contentEl);
             scheduleLiveStatusUpdates(contentEl);
+            initMonitoringBrowserScheduler(contentEl);
         }
 
         async function reloadDashboardPage(page, params = new URLSearchParams()) {
@@ -677,6 +823,7 @@ $dashboardPayload = [
             const response = await fetch('get_content.php?' + params.toString(), {
                 headers: { 'X-Requested-With': 'XMLHttpRequest' }
             });
+            ensureAuthenticatedResponse(response);
             const html = await response.text();
             renderContent(page, html);
 
@@ -729,6 +876,7 @@ $dashboardPayload = [
             showPageLoading(page);
 
             fetch('get_content.php?' + fetchParams.toString())
+                .then(ensureAuthenticatedResponse)
                 .then(res => res.text())
                 .then(html => {
                     renderContent(page, html);
@@ -805,6 +953,7 @@ $dashboardPayload = [
                         status: 'updated'
                     })
                 });
+                ensureAuthenticatedResponse(response);
                 const result = await response.json();
                 if (result.success) {
                     await Swal.fire({ icon: 'success', title: 'Project marked as updated', confirmButtonColor: '#3085d6' });
@@ -851,6 +1000,7 @@ $dashboardPayload = [
                     body: new FormData(form),
                     headers: { 'X-Requested-With': 'XMLHttpRequest' }
                 });
+                ensureAuthenticatedResponse(response);
 
                 if (!action.pathname.endsWith('/get_content.php')) {
                     const result = await response.json();
@@ -894,6 +1044,12 @@ $dashboardPayload = [
         });
 
         contentEl.addEventListener('click', async function(e) {
+            const runMonitoringButton = e.target.closest('[data-run-monitoring-now]');
+            if (runMonitoringButton) {
+                await runMonitoringNow({ button: runMonitoringButton });
+                return;
+            }
+
             const refreshButton = e.target.closest('[data-refresh-statuses]');
             if (refreshButton) {
                 refreshButton.disabled = true;
@@ -927,6 +1083,7 @@ $dashboardPayload = [
                     const response = await fetch(action.toString(), {
                         headers: { 'X-Requested-With': 'XMLHttpRequest' }
                     });
+                    ensureAuthenticatedResponse(response);
 
                     if (action.pathname.endsWith('/get_content.php')) {
                         const html = await response.text();

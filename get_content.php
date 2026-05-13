@@ -5,7 +5,29 @@ $tab = $_GET["tab"] ?? "dashboard";
 
 if (!isAuthenticated()) {
     http_response_code(401);
+    header("X-Nucleus-Auth-Expired: 1");
     echo "<div class=\"p-8 text-center\"><p class=\"text-slate-600\">Please login to continue</p></div>";
+    exit;
+}
+
+$featureMap = [
+    "dashboard" => "dashboard",
+    "folders" => "subjects",
+    "view-folder" => "subjects",
+    "create-subject" => "subjects",
+    "websites" => "projects",
+    "files" => "files",
+    "create-project" => "projects",
+    "project-form" => "projects",
+    "project-details" => "projects",
+    "requests" => "requests",
+    "settings" => "settings",
+    "alerts" => "alerts",
+    "logs" => "logs",
+];
+$featureKey = $featureMap[$tab] ?? null;
+if ($featureKey && !isFeatureEnabled($featureKey) && !shouldBypassMaintenance()) {
+    renderMaintenanceCard($featureKey);
     exit;
 }
 
@@ -18,6 +40,9 @@ switch ($tab) {
         break;
     case "websites":
         require_once __DIR__ . "/websites_content.php";
+        break;
+    case "files":
+        require_once __DIR__ . "/files_content.php";
         break;
     case "create-subject":
         require_once __DIR__ . "/createsubject.php";
@@ -48,6 +73,9 @@ switch ($tab) {
         break;
     case "settings":
         require_once __DIR__ . "/settings_content.php";
+        break;
+    case "alerts":
+        require_once __DIR__ . "/alerts_content.php";
         break;
     case "logs":
         require_once __DIR__ . "/activity_log.php";

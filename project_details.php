@@ -42,7 +42,17 @@ $failuresStmt = $pdo->prepare("SELECT * FROM deployment_checks WHERE project_id 
 $failuresStmt->execute([$projectId]);
 $failures = $failuresStmt->fetchAll();
 
-$trendStmt = $pdo->prepare("SELECT checked_at, response_time_ms, status FROM deployment_checks WHERE project_id = ? AND response_time_ms IS NOT NULL ORDER BY checked_at DESC, id DESC LIMIT 12");
+$responseWindow = ($_GET["range"] ?? "24h") === "7d" ? "7d" : "24h";
+$responseInterval = $responseWindow === "7d" ? "7 DAY" : "24 HOUR";
+$trendStmt = $pdo->prepare("
+    SELECT checked_at, response_time_ms, status
+    FROM deployment_checks
+    WHERE project_id = ?
+      AND response_time_ms IS NOT NULL
+      AND checked_at >= DATE_SUB(NOW(), INTERVAL {$responseInterval})
+    ORDER BY checked_at DESC, id DESC
+    LIMIT 48
+");
 $trendStmt->execute([$projectId]);
 $responseTrend = array_reverse($trendStmt->fetchAll());
 
@@ -60,10 +70,35 @@ foreach ($timelineStmt->fetchAll() as $row) {
 $status = $project["status"] ?? "initializing";
 $freshness = monitoringFreshness($project["last_successful_check"] ?? null, $project["remote_updated_at"] ?? null);
 $uptime = monitoringUptimePercent24h($pdo, $projectId);
+$snapshot = monitoringProjectSnapshot($pdo, $projectId);
+$healthScore = monitoringHealthScore($pdo, $projectId, $snapshot);
+$statusTimeline = monitoringStatusTimeline($pdo, $projectId, $responseWindow);
+$settings = monitoringSettings($pdo);
+$slowResponseMs = max(1, (int) ($settings["response_slow_ms"] ?? 3000));
+$alertsStmt = $pdo->prepare("
+    SELECT *
+    FROM monitoring_alerts
+    WHERE project_id = ?
+    ORDER BY is_resolved ASC, triggered_at DESC
+    LIMIT 6
+");
+$alertsStmt->execute([$projectId]);
+$projectAlerts = $alertsStmt->fetchAll();
 $maxResponseTime = 0;
 foreach ($responseTrend as $trend) {
-    $maxResponseTime = max($maxResponseTime, (int) $trend["response_time_ms"]);
+    $maxResponseTime = max($maxResponseTime, (int) $trend["response_time_ms"], $slowResponseMs);
 }
+$chartPoints = [];
+$chartWidth = 720;
+$chartHeight = 220;
+$chartPadding = 26;
+$pointCount = count($responseTrend);
+foreach ($responseTrend as $index => $trend) {
+    $x = $pointCount <= 1 ? $chartPadding : $chartPadding + (($chartWidth - ($chartPadding * 2)) * ($index / ($pointCount - 1)));
+    $y = $chartHeight - $chartPadding - (((int) $trend["response_time_ms"] / max(1, $maxResponseTime)) * ($chartHeight - ($chartPadding * 2)));
+    $chartPoints[] = round($x, 1) . "," . round($y, 1);
+}
+$slowY = $chartHeight - $chartPadding - (($slowResponseMs / max(1, $maxResponseTime)) * ($chartHeight - ($chartPadding * 2)));
 ?>
 <div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
   <div>
@@ -78,11 +113,11 @@ foreach ($responseTrend as $trend) {
   <a href="dashboard.php?page=create-project&websiteId=<?php echo $projectId; ?>" class="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800">Edit Project</a>
 </div>
 
-<section class="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+<section class="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
   <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
     <p class="text-sm font-medium text-slate-500">Current Status</p>
     <div class="mt-2">
-      <span data-project-status-id="<?php echo $projectId; ?>" title="<?php echo htmlspecialchars($project["status_note"] ?? ""); ?>" class="px-2 py-1 rounded text-sm font-medium badge-<?php echo htmlspecialchars($status); ?>"><?php echo ucfirst(htmlspecialchars($status)); ?></span>
+      <span data-project-status-id="<?php echo $projectId; ?>" title="<?php echo htmlspecialchars($project["status_note"] ?? ""); ?>" class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset <?php echo monitoringStatusBadgeClass($status); ?>"><?php echo ucfirst(htmlspecialchars($status)); ?></span>
     </div>
     <p class="mt-2 text-xs text-slate-500"><?php echo htmlspecialchars($project["status_note"] ?? "No status note yet."); ?></p>
   </div>
@@ -101,6 +136,14 @@ foreach ($responseTrend as $trend) {
     <p class="mt-2"><span data-health-state="<?php echo htmlspecialchars($freshness["state"]); ?>" title="<?php echo htmlspecialchars($freshness["message"]); ?>" class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset <?php echo monitoringHealthBadgeClass($freshness["state"]); ?>"><?php echo htmlspecialchars($freshness["label"]); ?></span></p>
     <p class="mt-2 text-xs text-slate-500">Uptime 24h: <span data-uptime-24h><?php echo $uptime === null ? "No checks" : htmlspecialchars($uptime . "%"); ?></span></p>
   </div>
+  <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+    <p class="text-sm font-medium text-slate-500">Project Health Score</p>
+    <div class="mt-2 flex items-center gap-3">
+      <p class="text-2xl font-bold text-slate-900"><?php echo (int) $healthScore["score"]; ?></p>
+      <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset <?php echo monitoringHealthScoreBadgeClass($healthScore["state"]); ?>"><?php echo htmlspecialchars($healthScore["label"]); ?></span>
+    </div>
+    <p class="mt-1 text-xs text-slate-500"><?php echo (int) $healthScore["unresolvedAlerts"]; ?> unresolved alerts · Avg <?php echo $healthScore["averageResponseMs"] === null ? "n/a" : (int) $healthScore["averageResponseMs"] . " ms"; ?></p>
+  </div>
 </section>
 
 <section class="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -110,12 +153,28 @@ foreach ($responseTrend as $trend) {
     <p data-latest-commit class="mt-1 text-xs text-slate-500"><?php echo htmlspecialchars(!empty($project["commit_hash"]) ? substr($project["commit_hash"], 0, 12) : "No commit yet"); ?></p>
   </div>
   <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
-    <p class="text-sm font-medium text-slate-500">Status Timeline - Last 24h</p>
-    <div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
-      <?php foreach (["deployed", "warning", "error", "building", "initializing"] as $timelineStatus): ?>
-      <div class="rounded-lg border border-slate-100 bg-slate-50 p-3">
-        <p class="text-xs font-medium uppercase text-slate-500"><?php echo htmlspecialchars($timelineStatus); ?></p>
-        <p class="mt-1 text-xl font-bold text-slate-900"><?php echo (int) ($timelineCounts[$timelineStatus] ?? 0); ?></p>
+    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <p class="text-sm font-medium text-slate-500">Monitoring Status Timeline</p>
+        <p class="mt-1 text-xs text-slate-500">State transitions with elapsed time between checks.</p>
+      </div>
+      <div class="flex rounded-lg border border-slate-200 bg-slate-50 p-1 text-xs font-semibold">
+        <a href="dashboard.php?page=project-details&projectId=<?php echo $projectId; ?>&range=24h" class="rounded-md px-3 py-1.5 <?php echo $responseWindow === "24h" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"; ?>">24h</a>
+        <a href="dashboard.php?page=project-details&projectId=<?php echo $projectId; ?>&range=7d" class="rounded-md px-3 py-1.5 <?php echo $responseWindow === "7d" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"; ?>">7d</a>
+      </div>
+    </div>
+    <div class="mt-5 space-y-4">
+      <?php if (!$statusTimeline): ?><p class="rounded-lg border border-slate-100 bg-slate-50 p-4 text-sm text-slate-500">No monitoring timeline events in this range.</p><?php endif; ?>
+      <?php foreach (array_slice($statusTimeline, -8) as $event): ?>
+      <div class="relative pl-8">
+        <span class="absolute left-0 top-1.5 h-3 w-3 rounded-full ring-4 ring-white <?php echo $event["status"] === "error" ? "bg-red-500" : ($event["status"] === "warning" ? "bg-amber-500" : ($event["status"] === "recovered" ? "bg-teal-500" : "bg-emerald-500")); ?>"></span>
+        <div class="rounded-lg border border-slate-100 bg-slate-50 p-3">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset <?php echo monitoringStatusBadgeClass($event["status"]); ?>"><?php echo ucfirst(htmlspecialchars($event["status"])); ?></span>
+            <span class="text-xs text-slate-500"><?php echo htmlspecialchars($event["displayCheckedAt"]); ?> · <?php echo htmlspecialchars($event["displayDuration"]); ?></span>
+          </div>
+          <p class="mt-2 text-sm text-slate-600"><?php echo htmlspecialchars($event["message"]); ?></p>
+        </div>
       </div>
       <?php endforeach; ?>
     </div>
@@ -124,32 +183,48 @@ foreach ($responseTrend as $trend) {
 
 <section class="mb-6 grid grid-cols-1 gap-4 xl:grid-cols-2">
   <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-    <h2 class="text-lg font-semibold text-slate-800">Response Time Trend</h2>
-    <div class="mt-4 space-y-3">
-      <?php if (!$responseTrend): ?><p class="text-sm text-slate-500">No response time checks recorded yet.</p><?php endif; ?>
-      <?php foreach ($responseTrend as $trend): ?>
-      <?php $barWidth = $maxResponseTime > 0 ? max(5, (int) round(((int) $trend["response_time_ms"] / $maxResponseTime) * 100)) : 0; ?>
+    <div class="flex items-start justify-between gap-4">
       <div>
-        <div class="mb-1 flex items-center justify-between text-xs text-slate-500">
-          <span><?php echo htmlspecialchars(formatNucleusDateTime($trend["checked_at"])); ?></span>
-          <span><?php echo (int) $trend["response_time_ms"]; ?> ms</span>
-        </div>
-        <div class="h-2 overflow-hidden rounded-full bg-slate-100">
-          <div class="h-full rounded-full bg-cta" style="width: <?php echo $barWidth; ?>%"></div>
-        </div>
+        <h2 class="text-lg font-semibold text-slate-800">Response Time Graph</h2>
+        <p class="mt-1 text-sm text-slate-500">Slow threshold: <?php echo $slowResponseMs; ?> ms</p>
       </div>
-      <?php endforeach; ?>
+      <span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600"><?php echo htmlspecialchars($responseWindow); ?></span>
+    </div>
+    <div class="mt-4">
+      <?php if (!$responseTrend): ?>
+      <p class="rounded-lg border border-slate-100 bg-slate-50 p-4 text-sm text-slate-500">No response time checks recorded in this range.</p>
+      <?php else: ?>
+      <svg viewBox="0 0 <?php echo $chartWidth; ?> <?php echo $chartHeight; ?>" class="h-64 w-full overflow-visible" role="img" aria-label="Response time line chart">
+        <line x1="<?php echo $chartPadding; ?>" y1="<?php echo round($slowY, 1); ?>" x2="<?php echo $chartWidth - $chartPadding; ?>" y2="<?php echo round($slowY, 1); ?>" stroke="#f59e0b" stroke-width="2" stroke-dasharray="6 6"></line>
+        <polyline points="<?php echo htmlspecialchars(implode(" ", $chartPoints)); ?>" fill="none" stroke="#4F9CF9" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></polyline>
+        <?php foreach ($responseTrend as $index => $trend): ?>
+        <?php
+          $point = explode(",", $chartPoints[$index]);
+          $isSlow = (int) $trend["response_time_ms"] > $slowResponseMs;
+        ?>
+        <circle cx="<?php echo htmlspecialchars($point[0]); ?>" cy="<?php echo htmlspecialchars($point[1]); ?>" r="5" fill="<?php echo $isSlow ? "#f59e0b" : "#4F9CF9"; ?>">
+          <title><?php echo htmlspecialchars(formatNucleusDateTime($trend["checked_at"]) . " · " . (int) $trend["response_time_ms"] . " ms"); ?></title>
+        </circle>
+        <?php endforeach; ?>
+      </svg>
+      <div class="mt-3 flex flex-wrap gap-3 text-xs text-slate-500">
+        <span class="inline-flex items-center gap-2"><span class="h-2 w-2 rounded-full bg-cta"></span>Normal response</span>
+        <span class="inline-flex items-center gap-2"><span class="h-2 w-2 rounded-full bg-amber-500"></span>Above slow threshold</span>
+      </div>
+      <?php endif; ?>
     </div>
   </div>
   <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-    <h2 class="text-lg font-semibold text-slate-800">Version / Commit History</h2>
+    <h2 class="text-lg font-semibold text-slate-800">Recent Alerts</h2>
     <div class="mt-4 space-y-3">
-      <?php if (!$versionHistory): ?><p class="text-sm text-slate-500">No version or commit checks recorded yet.</p><?php endif; ?>
-      <?php foreach ($versionHistory as $history): ?>
+      <?php if (!$projectAlerts): ?><p class="rounded-lg border border-slate-100 bg-slate-50 p-4 text-sm text-slate-500">No alerts recorded for this project.</p><?php endif; ?>
+      <?php foreach ($projectAlerts as $alert): ?>
       <div class="rounded-lg border border-slate-100 bg-slate-50 p-3">
-        <p class="text-sm font-medium text-slate-800"><?php echo htmlspecialchars($history["version"] ?? "No version"); ?></p>
-        <p class="mt-1 text-xs text-slate-500"><?php echo htmlspecialchars(!empty($history["commit_hash"]) ? substr($history["commit_hash"], 0, 12) : "No commit"); ?><?php if (!empty($history["branch"])): ?> · <?php echo htmlspecialchars($history["branch"]); ?><?php endif; ?></p>
-        <p class="mt-1 text-xs text-slate-400"><?php echo htmlspecialchars(formatNucleusDateTime($history["checked_at"])); ?></p>
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset <?php echo monitoringSeverityBadgeClass($alert["severity"]); ?>"><?php echo ucfirst(htmlspecialchars($alert["severity"])); ?></span>
+          <span class="text-xs text-slate-500"><?php echo $alert["is_resolved"] ? "Resolved" : "Unresolved"; ?> · <?php echo htmlspecialchars(formatNucleusDateTime($alert["triggered_at"])); ?></span>
+        </div>
+        <p class="mt-2 text-sm text-slate-600"><?php echo htmlspecialchars($alert["message"]); ?></p>
       </div>
       <?php endforeach; ?>
     </div>
@@ -196,7 +271,7 @@ foreach ($responseTrend as $trend) {
         <?php foreach ($checks as $check): ?>
         <tr class="hover:bg-slate-50">
           <td class="py-3 pl-6 pr-4 text-sm text-slate-600"><?php echo htmlspecialchars(formatNucleusDateTime($check["checked_at"])); ?></td>
-          <td class="py-3 pr-4"><span class="px-2 py-1 rounded text-sm font-medium badge-<?php echo htmlspecialchars($check["status"]); ?>"><?php echo ucfirst(htmlspecialchars($check["status"])); ?></span></td>
+          <td class="py-3 pr-4"><span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset <?php echo monitoringStatusBadgeClass($check["status"]); ?>"><?php echo ucfirst(htmlspecialchars($check["status"])); ?></span></td>
           <td class="py-3 pr-4 text-sm text-slate-600"><?php echo htmlspecialchars($check["http_code"] ?? "-"); ?></td>
           <td class="py-3 pr-4 text-sm text-slate-600"><?php echo $check["response_time_ms"] ? htmlspecialchars($check["response_time_ms"] . " ms") : "-"; ?></td>
           <td class="py-3 pr-4 text-sm text-slate-600"><?php echo htmlspecialchars($check["status_source"]); ?></td>

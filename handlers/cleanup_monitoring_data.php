@@ -53,10 +53,20 @@ try {
     $runsStmt->execute([$retentionDays]);
     $deletedRuns = $runsStmt->rowCount();
 
+    $alertsStmt = $pdo->prepare("
+        DELETE FROM monitoring_alerts
+        WHERE is_resolved = 1
+          AND resolved_at IS NOT NULL
+          AND resolved_at < DATE_SUB(NOW(), INTERVAL ? DAY)
+    ");
+    $alertsStmt->execute([$retentionDays]);
+    $deletedResolvedAlerts = $alertsStmt->rowCount();
+
     monitoringLog("Monitoring cleanup finished.", [
         "retentionDays" => $retentionDays,
         "deletedChecks" => $deletedChecks,
         "deletedRuns" => $deletedRuns,
+        "deletedResolvedAlerts" => $deletedResolvedAlerts,
     ]);
 
     cleanupResponse(200, [
@@ -64,6 +74,7 @@ try {
         "retentionDays" => $retentionDays,
         "deletedChecks" => $deletedChecks,
         "deletedRuns" => $deletedRuns,
+        "deletedResolvedAlerts" => $deletedResolvedAlerts,
         "message" => "Cleanup completed. Unresolved monitoring alerts were preserved.",
     ]);
 } catch (Throwable $e) {

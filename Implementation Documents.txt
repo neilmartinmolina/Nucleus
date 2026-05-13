@@ -1,0 +1,27 @@
+Implementation Documents
+
+2026-05-07 11:11:05 +08:00
+
+- Hardened monitoring lock handling for Windows/XAMPP and Linux.
+- Ensured the monitoring lock target is storage/locks/monitoring.lock.
+- Added validation before reading lock metadata: file exists, is a regular file, and is readable.
+- Prevented file_get_contents from being called on directories or unreadable lock paths.
+- Added safe logging for unreadable lock metadata.
+- Added safe handling for a directory accidentally created at the lock path; empty directories can be removed, non-empty directories fail safely.
+- Added admin-only manual monitoring trigger handler at handlers/run_monitoring_now.php.
+- Added dashboard "Run Monitoring Now" button visible only to admin/superadmin users.
+- Manual queue trigger uses a fixed PHP command with PHP_BINARY and escaped script path, no request-provided shell commands.
+- Manual trigger returns summarized JSON without exposing raw server paths.
+- Dashboard button now shows loading state, reports success/failure, refreshes statuses, and reloads dashboard content.
+
+2026-05-07 11:12:08 +08:00
+
+- Added a direct-access redirect bypass for JSON handlers that need to handle authentication themselves.
+- Made handlers/run_monitoring_now.php CLI-safe so direct local syntax/security checks return JSON instead of triggering XAMPP session temp-file warnings.
+- Flushed and rewound monitoring.lock after truncating lock metadata at queue shutdown.
+
+2026-05-07 11:13:32 +08:00
+
+- Verified php handlers/run_monitoring_queue.php batch=3 --force runs without the Windows/XAMPP lock permission notice.
+- Verified the admin manual monitoring handler triggers a queue batch and returns summarized JSON.
+- Confirmed monitoring_runs and deployment_checks row counts increased after manual queue execution.

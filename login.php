@@ -87,52 +87,112 @@ generateCSRFToken();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - Nucleus</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="tailwind.config.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { background-color: #f8f9fa; }
-        .login-card { max-width: 400px; margin: 100px auto; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
-        .login-header { background: linear-gradient(135deg, #4361ee 0%, #7209b7 100%); color: white; border-radius: 12px 12px 0 0; padding: 1.5rem; text-align: center; }
-        .btn-login { background: linear-gradient(135deg, #4361ee 0%, #7209b7 100%); border: none; padding: 0.75rem; font-weight: 600; }
-        .btn-login:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(67, 97, 238, 0.4); }
+        body {
+            font-family: "Corpta", "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+
+        .auth-visual {
+            background:
+                radial-gradient(circle at 20% 18%, rgba(232, 245, 255, 0.95), transparent 26%),
+                radial-gradient(circle at 82% 22%, rgba(101, 176, 255, 0.78), transparent 30%),
+                linear-gradient(135deg, #0050D8 0%, #1F7BFF 58%, #E8F5FF 100%);
+        }
     </style>
 </head>
-<body>
-<div class="container">
-    <div class="login-card card">
-        <div class="login-header">
-            <h4 class="mb-0"><i class="bi bi-shield-check"></i> System Updater</h4>
-        </div>
-        <div class="card-body p-4">
-            <?php if ($error): ?>
-                <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
-            <?php endif; ?>
-            
-            <form method="POST">
-                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
-                
-                <div class="mb-3">
-                    <label class="form-label">Username or Email</label>
-                    <input type="text" name="login" class="form-control" placeholder="Enter username or email" required autofocus>
-                </div>
-                
-                <div class="mb-4">
-                    <label class="form-label">Password</label>
-                    <input type="password" name="password" class="form-control" placeholder="Enter password" required>
-                </div>
-                
-                <button type="submit" class="btn btn-login text-white w-100">
-                    <i class="bi bi-box-arrow-in-right"></i> Login
-                </button>
-            </form>
+<body class="min-h-screen bg-[#E8F5FF] text-slate-800">
+    <main class="min-h-screen p-4 sm:p-6 lg:p-8">
+        <div class="mx-auto grid min-h-[calc(100vh-2rem)] max-w-6xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm sm:min-h-[calc(100vh-3rem)] lg:min-h-[calc(100vh-4rem)] lg:grid-cols-2">
+            <section class="flex items-center px-6 py-10 sm:px-10 lg:px-14">
+                <div class="w-full max-w-md">
+                    <a href="index.php" class="text-xl font-bold tracking-tight text-[#0050D8]">NUCLEUS</a>
+                    <div class="mt-10">
+                        <p class="text-sm font-semibold uppercase text-[#0050D8]">Welcome back</p>
+                        <h1 class="mt-3 text-3xl font-bold leading-tight text-slate-900 sm:text-4xl">Log in to your workspace.</h1>
+                        <p class="mt-4 text-sm leading-6 text-slate-500">Access your dashboard, review project status, and keep every subject moving.</p>
+                    </div>
 
-            <div class="d-flex justify-content-between align-items-center mt-3 small">
-                <a href="password_reset.php" class="text-decoration-none">Forgot password?</a>
-                <a href="signup.php" class="fw-semibold text-decoration-none">Create account</a>
-            </div>
-            
+                    <?php if ($error): ?>
+                        <div class="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"><?= htmlspecialchars($error) ?></div>
+                    <?php endif; ?>
+
+                    <form method="POST" class="mt-8 space-y-5">
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+
+                        <div>
+                            <label class="mb-2 block text-sm font-medium text-slate-700">Email or Username</label>
+                            <input type="text" name="login" class="w-full rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-[#0050D8] focus:ring-2 focus:ring-[#0050D8]/20" placeholder="you@example.com or username" required autofocus autocomplete="username">
+                        </div>
+
+                        <div>
+                            <div class="mb-2 flex items-center justify-between gap-3">
+                                <label class="block text-sm font-medium text-slate-700">Password</label>
+                                <a href="password_reset.php" class="text-sm font-medium text-[#0050D8] hover:text-[#003FA8]">Forgot?</a>
+                            </div>
+                            <input type="password" name="password" class="w-full rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-[#0050D8] focus:ring-2 focus:ring-[#0050D8]/20" placeholder="Enter your password" required>
+                        </div>
+
+                        <button type="submit" class="w-full rounded-lg bg-[#0050D8] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#003FA8]">Log In</button>
+                    </form>
+
+                    <p class="mt-6 text-center text-sm text-slate-500">
+                        New to Nucleus?
+                        <a href="signup.php" class="font-semibold text-[#0050D8] hover:text-[#003FA8]">Create account</a>
+                    </p>
+                </div>
+            </section>
+
+            <section class="auth-visual relative hidden overflow-hidden p-10 text-white lg:flex lg:items-center">
+                <div class="absolute inset-0 bg-[#0050D8]/20"></div>
+                <div class="relative w-full">
+                    <div class="mb-8 max-w-md">
+                        <p class="text-sm font-semibold uppercase text-[#E8F5FF]">Live project clarity</p>
+                        <h2 class="mt-3 text-3xl font-bold leading-tight">See updates, requests, and subjects in one focused dashboard.</h2>
+                    </div>
+                    <div class="rounded-2xl border border-white/25 bg-white/15 p-4 shadow-2xl shadow-blue-950/20 backdrop-blur">
+                        <div class="rounded-xl bg-white p-5 text-slate-800">
+                            <div class="mb-5 flex items-center justify-between border-b border-slate-100 pb-4">
+                                <div>
+                                    <p class="text-xs font-semibold uppercase text-[#0050D8]">Dashboard</p>
+                                    <h3 class="mt-1 text-lg font-bold">Project Health</h3>
+                                </div>
+                                <span class="rounded-full bg-[#E8F5FF] px-3 py-1 text-xs font-semibold text-[#0050D8]">Synced</span>
+                            </div>
+                            <div class="grid grid-cols-3 gap-3">
+                                <div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                                    <p class="text-2xl font-bold text-[#0050D8]">24</p>
+                                    <p class="mt-1 text-xs text-slate-500">Projects</p>
+                                </div>
+                                <div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                                    <p class="text-2xl font-bold text-[#0050D8]">8</p>
+                                    <p class="mt-1 text-xs text-slate-500">Subjects</p>
+                                </div>
+                                <div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                                    <p class="text-2xl font-bold text-[#0050D8]">3</p>
+                                    <p class="mt-1 text-xs text-slate-500">Requests</p>
+                                </div>
+                            </div>
+                            <div class="mt-5 space-y-3">
+                                <div class="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2">
+                                    <span class="text-sm font-medium">Capstone Portal</span>
+                                    <span class="text-xs font-semibold text-emerald-600">Updated</span>
+                                </div>
+                                <div class="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2">
+                                    <span class="text-sm font-medium">Research Archive</span>
+                                    <span class="text-xs font-semibold text-[#0050D8]">Checking</span>
+                                </div>
+                                <div class="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2">
+                                    <span class="text-sm font-medium">Lab Tracker</span>
+                                    <span class="text-xs font-semibold text-amber-600">Review</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
         </div>
-    </div>
-</div>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    </main>
 </body>
 </html>

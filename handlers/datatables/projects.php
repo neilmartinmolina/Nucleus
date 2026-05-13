@@ -66,13 +66,15 @@ $fromSql = "
     LEFT JOIN project_status ps ON ps.project_id = p.project_id
     LEFT JOIN users u ON ps.updated_by = u.userId
     LEFT JOIN subjects s ON p.subject_id = s.subject_id
-    LEFT JOIN deployment_checks dc ON dc.id = (
-        SELECT id
-        FROM deployment_checks
-        WHERE project_id = p.project_id
-        ORDER BY checked_at DESC, id DESC
-        LIMIT 1
-    )
+    LEFT JOIN (
+        SELECT dc1.*
+        FROM deployment_checks dc1
+        INNER JOIN (
+            SELECT project_id, MAX(id) AS latest_check_id
+            FROM deployment_checks
+            GROUP BY project_id
+        ) latest_dc ON latest_dc.latest_check_id = dc1.id
+    ) dc ON dc.project_id = p.project_id
 ";
 
 $totalParams = [];
@@ -89,10 +91,10 @@ $recordsFiltered = (int) $filteredStmt->fetchColumn();
 
 $dataStmt = $pdo->prepare("
     SELECT p.*, ps.status, ps.status_note, ps.updated_by AS updatedBy, u.fullName, s.subject_code AS folderName,
-           dc.response_time_ms, dc.status_source,
+           dc.response_time_ms, dc.status_source, dc.version AS check_version, dc.remote_updated_at,
            dc.commit_hash, dc.branch, dc.checked_at AS latest_check_at,
-           (SELECT MAX(checked_at) FROM deployment_checks WHERE project_id = p.project_id AND status = 'deployed') AS last_successful_check,
-           (SELECT COUNT(*) FROM deployment_checks dcf WHERE dcf.project_id = p.project_id AND dcf.status IN ('warning','error') AND dcf.checked_at > COALESCE((SELECT MAX(dcs.checked_at) FROM deployment_checks dcs WHERE dcs.project_id = p.project_id AND dcs.status = 'deployed'), '1970-01-01')) AS consecutive_failures
+           ps.last_successful_check_at AS last_successful_check,
+           COALESCE(ps.consecutive_failures, 0) AS consecutive_failures
     {$fromSql}
     {$filteredWhere}
     ORDER BY {$orderBy} {$orderDir}, p.project_id DESC
@@ -112,6 +114,8 @@ foreach ($dataStmt->fetchAll() as $project) {
     $statusSource = htmlspecialchars($project["status_source"] ?? "-");
     $freshness = monitoringFreshness($project["last_successful_check"] ?? null, $project["remote_updated_at"] ?? null);
     $uptime = monitoringUptimePercent24h($pdo, $projectId);
+    $snapshot = monitoringProjectSnapshot($pdo, $projectId);
+    $healthScore = monitoringHealthScore($pdo, $projectId, $snapshot);
     $uptimeText = $uptime === null ? "No checks" : htmlspecialchars($uptime . "%");
     $latest = htmlspecialchars($project["check_version"] ?? "-");
     if (!empty($project["commit_hash"])) {
@@ -134,7 +138,7 @@ foreach ($dataStmt->fetchAll() as $project) {
         "<span class=\"font-medium text-slate-800\">" . htmlspecialchars($project["project_name"]) . "</span>",
         "<span class=\"text-sm text-slate-600\">" . htmlspecialchars($project["folderName"] ?? "-") . "</span>",
         "<span data-project-status-id=\"{$projectId}\" title=\"{$statusTitle}\" class=\"px-2 py-1 rounded text-sm font-medium badge-{$status}\">" . ucfirst($status) . "</span><div class=\"mt-1 text-xs text-slate-500\">" . htmlspecialchars(deploymentModeLabel($project["deployment_mode"] ?? "hostinger_git")) . "</div>",
-        "<div class=\"text-xs text-slate-500\"><div class=\"mb-2\"><span data-health-state=\"" . htmlspecialchars($freshness["state"]) . "\" title=\"" . htmlspecialchars($freshness["message"]) . "\" class=\"inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset " . monitoringHealthBadgeClass($freshness["state"]) . "\">" . htmlspecialchars($freshness["label"]) . "</span></div><div><span data-status-response-time>{$responseTime}</span> &middot; <span data-status-source>{$statusSource}</span></div><div>Last OK: <span data-last-successful-check>" . htmlspecialchars(formatNucleusDateTime($project["last_successful_check"])) . "</span></div><div>Failures: <span data-consecutive-failures>" . (int) ($project["consecutive_failures"] ?? 0) . "</span></div><div>Uptime 24h: <span data-uptime-24h>{$uptimeText}</span></div><div>Latest: {$latest}</div></div>",
+        "<div class=\"text-xs text-slate-500\"><div class=\"mb-2\"><span data-health-state=\"" . htmlspecialchars($freshness["state"]) . "\" title=\"" . htmlspecialchars($freshness["message"]) . "\" class=\"inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset " . monitoringHealthBadgeClass($freshness["state"]) . "\">" . htmlspecialchars($freshness["label"]) . "</span></div><div class=\"mb-2\"><span class=\"inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset " . monitoringHealthScoreBadgeClass($healthScore["state"]) . "\">Score " . (int) $healthScore["score"] . " &middot; " . htmlspecialchars($healthScore["label"]) . "</span></div><div><span data-status-response-time>{$responseTime}</span> &middot; <span data-status-source>{$statusSource}</span></div><div>Last OK: <span data-last-successful-check>" . htmlspecialchars(formatNucleusDateTime($project["last_successful_check"])) . "</span></div><div>Failures: <span data-consecutive-failures>" . (int) ($project["consecutive_failures"] ?? 0) . "</span></div><div>Uptime 24h: <span data-uptime-24h>{$uptimeText}</span></div><div>Latest: {$latest}</div></div>",
         "<span class=\"text-sm text-slate-600\">" . htmlspecialchars(displayUpdatedBy($project)) . "</span>",
         "<span class=\"text-sm text-slate-500\">" . htmlspecialchars(formatNucleusDateTime($project["last_updated_at"])) . "</span>",
         "<span class=\"text-sm text-slate-500\">" . htmlspecialchars(formatNucleusDateTime($project["saved_at"] ?? $project["created_at"])) . "</span>",

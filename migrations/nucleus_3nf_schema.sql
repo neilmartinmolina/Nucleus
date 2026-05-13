@@ -191,6 +191,20 @@ CREATE TABLE IF NOT EXISTS monitoring_settings (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS feature_flags (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    feature_key VARCHAR(100) NOT NULL UNIQUE,
+    feature_name VARCHAR(255) NOT NULL,
+    feature_group VARCHAR(100) NULL,
+    is_enabled TINYINT(1) NOT NULL DEFAULT 1,
+    maintenance_message TEXT NULL,
+    updated_by INT NULL,
+    updated_at DATETIME NULL,
+    FOREIGN KEY (updated_by) REFERENCES users(userId) ON DELETE SET NULL,
+    INDEX idx_feature_flags_group (feature_group),
+    INDEX idx_feature_flags_enabled (is_enabled)
+);
+
 CREATE TABLE IF NOT EXISTS project_members (
     project_member_id INT PRIMARY KEY AUTO_INCREMENT,
     project_id INT NOT NULL,
@@ -231,6 +245,29 @@ CREATE TABLE IF NOT EXISTS files (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (project_id) REFERENCES projects(project_id) ON DELETE CASCADE,
     FOREIGN KEY (uploaded_by) REFERENCES users(userId) ON DELETE RESTRICT
+);
+
+CREATE TABLE IF NOT EXISTS resource_files (
+    resource_file_id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    project_id INT NOT NULL,
+    uploaded_by INT NOT NULL,
+    storage_driver ENUM('local','ftp') NOT NULL DEFAULT 'local',
+    storage_path VARCHAR(2048) NOT NULL,
+    file_size BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    mime_type VARCHAR(150) NULL,
+    original_filename VARCHAR(255) NOT NULL,
+    stored_filename VARCHAR(255) NOT NULL,
+    is_deleted TINYINT(1) NOT NULL DEFAULT 0,
+    deleted_at TIMESTAMP NULL,
+    deleted_by INT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (project_id) REFERENCES projects(project_id) ON DELETE CASCADE,
+    FOREIGN KEY (uploaded_by) REFERENCES users(userId) ON DELETE RESTRICT,
+    FOREIGN KEY (deleted_by) REFERENCES users(userId) ON DELETE SET NULL,
+    INDEX idx_resource_files_project_deleted (project_id, is_deleted),
+    INDEX idx_resource_files_uploaded_by (uploaded_by),
+    INDEX idx_resource_files_storage (storage_driver, storage_path(191))
 );
 
 CREATE TABLE IF NOT EXISTS comments (
@@ -309,6 +346,7 @@ FROM roles WHERE role_name = 'visitor';
 
 INSERT INTO monitoring_settings (setting_key, setting_value)
 VALUES
+('scheduler_mode', 'manual'),
 ('check_interval_minutes', '5'),
 ('stale_after_minutes', '10'),
 ('failure_threshold', '3'),
@@ -316,6 +354,20 @@ VALUES
 ('response_slow_ms', '3000'),
 ('retention_days', '30')
 ON DUPLICATE KEY UPDATE setting_value = setting_value;
+
+INSERT INTO feature_flags (feature_key, feature_name, feature_group, is_enabled)
+VALUES
+('dashboard', 'Dashboard', 'Core', 1),
+('projects', 'Projects', 'Projects', 1),
+('subjects', 'Subjects', 'Subjects', 1),
+('subject_resources', 'Subject Resources', 'Subjects', 1),
+('subject_posts', 'Subject Posts', 'Subjects', 1),
+('tutorials', 'Tutorials', 'Learning', 1),
+('alerts', 'Alerts', 'Monitoring', 1),
+('requests', 'Requests', 'Workflow', 1),
+('logs', 'Logs', 'Admin', 1),
+('settings', 'Settings', 'Admin', 1)
+ON DUPLICATE KEY UPDATE feature_name = VALUES(feature_name), feature_group = VALUES(feature_group);
 
 INSERT IGNORE INTO subjects (subject_code, subject_name, description, created_by)
 SELECT 'GENERAL', 'General Projects', 'Default subject for uncategorized academic projects.', userId

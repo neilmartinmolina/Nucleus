@@ -26,6 +26,90 @@ function queueAuthorized(): bool
     return $expected !== "" && hash_equals($expected, $provided);
 }
 
+function queueLockMetadata(string $lockPath): array
+{
+    if (!file_exists($lockPath)) {
+        return [];
+    }
+
+    if (!is_file($lockPath)) {
+        monitoringLog("Lock metadata unreadable.", [
+            "reason" => is_dir($lockPath) ? "lock_path_is_directory" : "lock_path_is_not_file",
+        ]);
+        return [];
+    }
+
+    if (!is_readable($lockPath)) {
+        monitoringLog("Lock metadata unreadable.", ["reason" => "lock_file_not_readable"]);
+        return [];
+    }
+
+    $rawContent = @file_get_contents($lockPath);
+    if ($rawContent === false) {
+        monitoringLog("Lock metadata unreadable.", ["reason" => "file_get_contents_failed"]);
+        return [];
+    }
+
+    $raw = trim((string) $rawContent);
+    if ($raw === "") {
+        return [];
+    }
+
+    $metadata = json_decode($raw, true);
+    return is_array($metadata) ? $metadata : ["raw" => $raw];
+}
+
+function queuePrepareLockFile(string $lockPath): bool
+{
+    $lockDirectory = dirname($lockPath);
+    monitoringEnsureDirectory($lockDirectory);
+
+    if (is_dir($lockPath)) {
+        $items = array_diff(scandir($lockPath) ?: [], [".", ".."]);
+        if (!$items && @rmdir($lockPath)) {
+            monitoringLog("Replaced directory at monitoring lock path.", ["reason" => "empty_directory_removed"]);
+            return true;
+        }
+
+        monitoringLog("Monitoring lock path is a directory and cannot be replaced safely.", [
+            "reason" => "lock_path_is_directory",
+        ]);
+        return false;
+    }
+
+    return true;
+}
+
+function queueLockAgeSeconds(array $metadata): ?int
+{
+    if (empty($metadata["started_at"])) {
+        return null;
+    }
+
+    $startedAt = strtotime((string) $metadata["started_at"]);
+    if ($startedAt === false) {
+        return null;
+    }
+
+    return max(0, time() - $startedAt);
+}
+
+function queueWriteLockMetadata($lockHandle, int $runId, int $batchSize, bool $force): void
+{
+    $metadata = [
+        "pid" => function_exists("getmypid") ? getmypid() : null,
+        "started_at" => date("c"),
+        "run_id" => $runId,
+        "batch_size" => $batchSize,
+        "force" => $force,
+    ];
+
+    ftruncate($lockHandle, 0);
+    rewind($lockHandle);
+    fwrite($lockHandle, json_encode($metadata, JSON_UNESCAPED_SLASHES));
+    fflush($lockHandle);
+}
+
 if (!queueAuthorized()) {
     queueResponse(403, ["success" => false, "message" => "Monitoring queue is not authorized."]);
 }
@@ -45,26 +129,61 @@ if ($isCli && !empty($argv)) {
     }
 }
 
+$lockStaleAfterSeconds = max(900, $batchSize * 30);
 $startedAtMs = (int) round(microtime(true) * 1000);
 $lockPath = monitoringStoragePath("locks/monitoring.lock");
-monitoringEnsureDirectory(dirname($lockPath));
+if (!queuePrepareLockFile($lockPath)) {
+    $runId = monitoringStartRun($pdo, $batchSize);
+    monitoringFinishRun($pdo, $runId, "failed", 0, 0, 1, "Monitoring lock path is invalid.", $startedAtMs);
+    queueResponse(500, [
+        "success" => false,
+        "status" => "failed",
+        "runId" => $runId,
+        "message" => "Monitoring lock path is invalid. Check storage/locks/monitoring.lock.",
+        "checked" => 0,
+        "errors" => 1,
+    ]);
+}
+
 $lockHandle = fopen($lockPath, "c");
 
 if (!$lockHandle || !flock($lockHandle, LOCK_EX | LOCK_NB)) {
-    monitoringLog("Monitoring queue already running.");
+    $lockMetadata = queueLockMetadata($lockPath);
+    $lockAgeSeconds = queueLockAgeSeconds($lockMetadata);
+    monitoringLog("Monitoring queue already running.", [
+        "lockAgeSeconds" => $lockAgeSeconds,
+        "lockStaleAfterSeconds" => $lockStaleAfterSeconds,
+        "lockMetadata" => $lockMetadata,
+    ]);
     $runId = monitoringStartRun($pdo, $batchSize);
-    monitoringFinishRun($pdo, $runId, "skipped", 0, 0, 0, "Monitoring queue already running.", $startedAtMs);
+    $message = "Monitoring queue already running.";
+    if ($lockAgeSeconds !== null && $lockAgeSeconds > $lockStaleAfterSeconds) {
+        $message .= " Lock metadata appears stale, but an active filesystem lock is still held.";
+    }
+    monitoringFinishRun($pdo, $runId, "skipped", 0, 0, 0, $message, $startedAtMs);
     queueResponse(200, [
         "success" => true,
         "status" => "skipped",
-        "message" => "Monitoring queue already running.",
+        "message" => $message,
         "checked" => 0,
         "skipped" => 0,
         "errors" => 0,
+        "lockAgeSeconds" => $lockAgeSeconds,
     ]);
 }
 
 $runId = monitoringStartRun($pdo, $batchSize);
+$previousLockMetadata = queueLockMetadata($lockPath);
+$previousLockAgeSeconds = queueLockAgeSeconds($previousLockMetadata);
+if ($previousLockAgeSeconds !== null && $previousLockAgeSeconds > $lockStaleAfterSeconds) {
+    monitoringLog("Replacing stale monitoring lock metadata.", [
+        "runId" => $runId,
+        "lockAgeSeconds" => $previousLockAgeSeconds,
+        "lockStaleAfterSeconds" => $lockStaleAfterSeconds,
+        "lockMetadata" => $previousLockMetadata,
+    ]);
+}
+queueWriteLockMetadata($lockHandle, $runId, $batchSize, $force);
 $checked = 0;
 $errors = 0;
 $results = [];
@@ -147,6 +266,9 @@ try {
         "durationMs" => $durationMs,
     ]);
 } finally {
+    ftruncate($lockHandle, 0);
+    rewind($lockHandle);
+    fflush($lockHandle);
     flock($lockHandle, LOCK_UN);
     fclose($lockHandle);
 }

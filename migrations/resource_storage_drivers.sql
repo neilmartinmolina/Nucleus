@@ -1,0 +1,22 @@
+CREATE TABLE IF NOT EXISTS resource_files (
+    resource_file_id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    project_id INT NOT NULL,
+    uploaded_by INT NOT NULL,
+    storage_driver ENUM('local','ftp') NOT NULL DEFAULT 'local',
+    storage_path VARCHAR(2048) NOT NULL,
+    file_size BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    mime_type VARCHAR(150) NULL,
+    original_filename VARCHAR(255) NOT NULL,
+    stored_filename VARCHAR(255) NOT NULL,
+    is_deleted TINYINT(1) NOT NULL DEFAULT 0,
+    deleted_at TIMESTAMP NULL,
+    deleted_by INT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (project_id) REFERENCES projects(project_id) ON DELETE CASCADE,
+    FOREIGN KEY (uploaded_by) REFERENCES users(userId) ON DELETE RESTRICT,
+    FOREIGN KEY (deleted_by) REFERENCES users(userId) ON DELETE SET NULL,
+    INDEX idx_resource_files_project_deleted (project_id, is_deleted),
+    INDEX idx_resource_files_uploaded_by (uploaded_by),
+    INDEX idx_resource_files_storage (storage_driver, storage_path(191))
+);

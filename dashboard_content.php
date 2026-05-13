@@ -2,19 +2,31 @@
 require_once __DIR__ . "/includes/core.php";
 
 $roleManager = new RoleManager($pdo);
+$canRunMonitoringNow = in_array($roleManager->getUserRole($_SESSION["userId"] ?? null), ["admin", "superadmin"], true);
 [$accessWhere, $accessParams] = $roleManager->projectAccessSql("p");
 $todayWhere = $accessWhere ? $accessWhere . " AND DATE(p.last_updated_at) = CURDATE()" : " WHERE DATE(p.last_updated_at) = CURDATE()";
+$latestCheckJoin = "
+    LEFT JOIN (
+        SELECT dc1.*
+        FROM deployment_checks dc1
+        INNER JOIN (
+            SELECT project_id, MAX(id) AS latest_check_id
+            FROM deployment_checks
+            GROUP BY project_id
+        ) latest_dc ON latest_dc.latest_check_id = dc1.id
+    ) dc ON dc.project_id = p.project_id
+";
 
 $todayQuery = "
     SELECT p.*, ps.status, ps.status_note, ps.updated_by AS updatedBy, u.fullName,
            dc.response_time_ms, dc.status_source, dc.version AS check_version, dc.remote_updated_at,
            dc.commit_hash, dc.checked_at AS latest_check_at,
-           (SELECT MAX(checked_at) FROM deployment_checks WHERE project_id = p.project_id AND status = 'deployed') AS last_successful_check,
-           (SELECT COUNT(*) FROM deployment_checks dcf WHERE dcf.project_id = p.project_id AND dcf.status IN ('warning','error') AND dcf.checked_at > COALESCE((SELECT MAX(dcs.checked_at) FROM deployment_checks dcs WHERE dcs.project_id = p.project_id AND dcs.status = 'deployed'), '1970-01-01')) AS consecutive_failures
+           ps.last_successful_check_at AS last_successful_check,
+           COALESCE(ps.consecutive_failures, 0) AS consecutive_failures
     FROM projects p
     LEFT JOIN project_status ps ON ps.project_id = p.project_id
     LEFT JOIN users u ON ps.updated_by = u.userId
-    LEFT JOIN deployment_checks dc ON dc.id = (SELECT id FROM deployment_checks WHERE project_id = p.project_id ORDER BY checked_at DESC, id DESC LIMIT 1)
+    {$latestCheckJoin}
     {$todayWhere}
     ORDER BY p.last_updated_at DESC
     LIMIT 50
@@ -27,12 +39,12 @@ $allStmt = $pdo->prepare("
     SELECT p.*, ps.status, ps.status_note, ps.updated_by AS updatedBy, u.fullName,
            dc.response_time_ms, dc.status_source, dc.version AS check_version, dc.remote_updated_at,
            dc.commit_hash, dc.checked_at AS latest_check_at,
-           (SELECT MAX(checked_at) FROM deployment_checks WHERE project_id = p.project_id AND status = 'deployed') AS last_successful_check,
-           (SELECT COUNT(*) FROM deployment_checks dcf WHERE dcf.project_id = p.project_id AND dcf.status IN ('warning','error') AND dcf.checked_at > COALESCE((SELECT MAX(dcs.checked_at) FROM deployment_checks dcs WHERE dcs.project_id = p.project_id AND dcs.status = 'deployed'), '1970-01-01')) AS consecutive_failures
+           ps.last_successful_check_at AS last_successful_check,
+           COALESCE(ps.consecutive_failures, 0) AS consecutive_failures
     FROM projects p
     LEFT JOIN project_status ps ON ps.project_id = p.project_id
     LEFT JOIN users u ON ps.updated_by = u.userId
-    LEFT JOIN deployment_checks dc ON dc.id = (SELECT id FROM deployment_checks WHERE project_id = p.project_id ORDER BY checked_at DESC, id DESC LIMIT 1)
+    {$latestCheckJoin}
     {$accessWhere}
     ORDER BY p.project_name ASC
     LIMIT 25
@@ -47,7 +59,27 @@ $totalFolders = $pdo->query("SELECT COUNT(*) as c FROM subjects")->fetch()["c"];
 $totalUsers = $pdo->query("SELECT COUNT(*) as c FROM users")->fetch()["c"];
 $updatedToday = count($today);
 $monitoringSettings = monitoringSettings($pdo);
+$schedulerMode = monitoringNormalizeSchedulerMode((string) ($monitoringSettings["scheduler_mode"] ?? ""));
+$schedulerModes = monitoringSchedulerModes();
 $lastMonitoringRun = monitoringLastRun($pdo);
+$monitoringLockState = monitoringLockState();
+$latestErrorRuns = $pdo->query("
+    SELECT id, status, message, error_count, started_at
+    FROM monitoring_runs
+    WHERE status = 'failed' OR error_count > 0
+    ORDER BY started_at DESC, id DESC
+    LIMIT 3
+")->fetchAll();
+$openAlertCounts = $pdo->query("
+    SELECT severity, COUNT(*) AS count
+    FROM monitoring_alerts
+    WHERE is_resolved = 0
+    GROUP BY severity
+")->fetchAll();
+$openAlertTotal = 0;
+foreach ($openAlertCounts as $alertCount) {
+    $openAlertTotal += (int) $alertCount["count"];
+}
 $monitoringStaleAfter = max(1, (int) ($monitoringSettings["stale_after_minutes"] ?? 10));
 $monitoringRunAgeMinutes = null;
 $monitoringIsBroken = false;
@@ -65,7 +97,9 @@ if (!$lastMonitoringRun) {
         $monitoringWarning = "The monitoring queue has not run within {$monitoringStaleAfter} minutes.";
     }
 }
-$cronCommand = "php " . str_replace("\\", "/", __DIR__) . "/handlers/run_monitoring_queue.php batch=" . (int) ($monitoringSettings["batch_size"] ?? 10);
+$monitoringIntervalMinutes = max(1, (int) ($monitoringSettings["check_interval_minutes"] ?? 5));
+$lastMonitoringRunStartedMs = $lastMonitoringRun ? (int) strtotime($lastMonitoringRun["started_at"]) * 1000 : 0;
+$cronCommand = monitoringCronCommand($monitoringSettings);
 ?>
 
  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
@@ -106,23 +140,54 @@ $cronCommand = "php " . str_replace("\\", "/", __DIR__) . "/handlers/run_monitor
     </div>
   </div>
 </div>
-<section class="mb-8 rounded-xl border <?php echo $monitoringIsBroken ? "border-amber-200 bg-amber-50" : "border-slate-200 bg-white"; ?> p-6 shadow-sm">
+<section
+  class="mb-8 rounded-xl border <?php echo $monitoringIsBroken ? "border-amber-200 bg-amber-50" : "border-slate-200 bg-white"; ?> p-6 shadow-sm"
+  data-monitoring-scheduler
+  data-scheduler-mode="<?php echo htmlspecialchars($schedulerMode); ?>"
+  data-monitoring-interval-minutes="<?php echo $monitoringIntervalMinutes; ?>"
+  data-monitoring-lock-state="<?php echo htmlspecialchars($monitoringLockState["state"] ?? "idle"); ?>"
+  data-monitoring-last-run-ms="<?php echo $lastMonitoringRunStartedMs; ?>"
+  data-can-run-monitoring="<?php echo $canRunMonitoringNow ? "1" : "0"; ?>"
+>
   <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
     <div>
       <div class="flex flex-wrap items-center gap-2">
         <h2 class="text-lg font-semibold text-slate-800">Monitoring Diagnostics</h2>
+        <span class="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 ring-1 ring-inset ring-slate-500/20">
+          <?php echo htmlspecialchars($schedulerModes[$schedulerMode]["label"] ?? "Manual"); ?>
+        </span>
         <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset <?php echo $monitoringIsBroken ? "bg-amber-100 text-amber-800 ring-amber-600/20" : "bg-emerald-50 text-emerald-700 ring-emerald-600/20"; ?>">
           <?php echo $monitoringIsBroken ? "Attention needed" : "Healthy"; ?>
         </span>
       </div>
-      <p class="mt-1 text-sm text-slate-500">Queue should run every 1-5 minutes depending on project count. Browser polling only reads DB state.</p>
+      <p class="mt-1 text-sm text-slate-500"><?php echo htmlspecialchars($schedulerModes[$schedulerMode]["description"] ?? "Manual fallback remains available."); ?></p>
       <?php if ($monitoringWarning): ?>
       <p class="mt-3 rounded-lg border border-amber-200 bg-white/70 p-3 text-sm text-amber-800"><?php echo htmlspecialchars($monitoringWarning); ?></p>
       <?php endif; ?>
     </div>
-    <code class="block max-w-full overflow-x-auto rounded-lg bg-slate-900 px-3 py-2 text-xs text-white"><?php echo htmlspecialchars($cronCommand); ?></code>
+    <div class="flex max-w-full flex-col gap-2 sm:items-end">
+      <div class="flex flex-wrap gap-2 sm:justify-end">
+        <a href="dashboard.php?page=alerts" class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Open Alerts: <?php echo $openAlertTotal; ?></a>
+        <?php if ($canRunMonitoringNow): ?>
+        <button type="button" data-run-monitoring-now class="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-wait disabled:opacity-60">Run Monitoring Now</button>
+        <?php endif; ?>
+      </div>
+      <code class="block max-w-full overflow-x-auto rounded-lg bg-slate-900 px-3 py-2 text-xs text-white"><?php echo htmlspecialchars($cronCommand); ?></code>
+    </div>
   </div>
-  <div class="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+  <?php if ($schedulerMode === "browser_demo" && $canRunMonitoringNow): ?>
+  <div class="mt-4 rounded-lg border border-sky-100 bg-sky-50 p-4 text-sm text-sky-800">
+    Browser demo timer is active for this admin session. It waits at least <?php echo $monitoringIntervalMinutes; ?> minute<?php echo $monitoringIntervalMinutes === 1 ? "" : "s"; ?> between queue attempts and skips while the lock is running.
+  </div>
+  <?php elseif ($schedulerMode === "external_cron"): ?>
+  <div class="mt-4 rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-600">
+    <p class="font-semibold text-slate-800">External scheduler command</p>
+    <p class="mt-1">Linux cron: run this every <?php echo $monitoringIntervalMinutes; ?> minute<?php echo $monitoringIntervalMinutes === 1 ? "" : "s"; ?>:</p>
+    <code class="mt-2 block max-w-full overflow-x-auto rounded-lg bg-slate-900 px-3 py-2 text-xs text-white"><?php echo htmlspecialchars($cronCommand); ?></code>
+    <p class="mt-2">Windows Task Scheduler: create a repeating task that starts PHP and passes <code>handlers/run_monitoring_queue.php batch=<?php echo (int) ($monitoringSettings["batch_size"] ?? 10); ?></code> as arguments. If the job fails or the queue becomes stale, the manual button above remains the fallback.</p>
+  </div>
+  <?php endif; ?>
+  <div class="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
     <div class="rounded-lg border border-slate-200 bg-white p-3">
       <p class="text-xs font-medium uppercase text-slate-500">Last Run</p>
       <p class="mt-1 text-sm font-semibold text-slate-800"><?php echo $lastMonitoringRun ? htmlspecialchars(formatNucleusDateTime($lastMonitoringRun["started_at"])) : "Never"; ?></p>
@@ -142,6 +207,36 @@ $cronCommand = "php " . str_replace("\\", "/", __DIR__) . "/handlers/run_monitor
     <div class="rounded-lg border border-slate-200 bg-white p-3">
       <p class="text-xs font-medium uppercase text-slate-500">Errors</p>
       <p class="mt-1 text-sm font-semibold text-slate-800"><?php echo (int) ($lastMonitoringRun["error_count"] ?? 0); ?></p>
+    </div>
+    <div class="rounded-lg border border-slate-200 bg-white p-3">
+      <p class="text-xs font-medium uppercase text-slate-500">Queue Lock</p>
+      <p class="mt-1 text-sm font-semibold text-slate-800"><?php echo htmlspecialchars($monitoringLockState["label"]); ?></p>
+      <p class="mt-1 text-xs text-slate-500"><?php echo htmlspecialchars($monitoringLockState["message"]); ?></p>
+    </div>
+  </div>
+  <div class="mt-5 rounded-lg border border-slate-200 bg-white p-4">
+    <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+      <div>
+        <p class="text-sm font-semibold text-slate-800">Queue Diagnostics</p>
+        <p class="mt-1 text-sm text-slate-500">Last run, lock state, stale warnings, and latest queue errors.</p>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <?php foreach ($openAlertCounts as $alertCount): ?>
+        <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset <?php echo monitoringSeverityBadgeClass($alertCount["severity"]); ?>"><?php echo ucfirst(htmlspecialchars($alertCount["severity"])); ?>: <?php echo (int) $alertCount["count"]; ?></span>
+        <?php endforeach; ?>
+      </div>
+    </div>
+    <div class="mt-4 space-y-2">
+      <?php if (!$latestErrorRuns): ?><p class="text-sm text-slate-500">No recent queue errors recorded.</p><?php endif; ?>
+      <?php foreach ($latestErrorRuns as $errorRun): ?>
+      <div class="rounded-lg border border-slate-100 bg-slate-50 p-3 text-sm text-slate-600">
+        <span class="font-semibold text-slate-800">Run #<?php echo (int) $errorRun["id"]; ?></span>
+        · <?php echo htmlspecialchars($errorRun["status"]); ?>
+        · <?php echo (int) $errorRun["error_count"]; ?> errors
+        · <?php echo htmlspecialchars(formatNucleusDateTime($errorRun["started_at"])); ?>
+        <p class="mt-1 text-xs text-slate-500"><?php echo htmlspecialchars($errorRun["message"] ?? "No message recorded."); ?></p>
+      </div>
+      <?php endforeach; ?>
     </div>
   </div>
 </section>
@@ -195,6 +290,8 @@ $cronCommand = "php " . str_replace("\\", "/", __DIR__) . "/handlers/run_monitor
 <?php
   $freshness = monitoringFreshness($r["last_successful_check"] ?? null, $r["remote_updated_at"] ?? null);
   $uptime = monitoringUptimePercent24h($pdo, (int) $r["project_id"]);
+  $snapshot = monitoringProjectSnapshot($pdo, (int) $r["project_id"]);
+  $healthScore = monitoringHealthScore($pdo, (int) $r["project_id"], $snapshot);
 ?>
  <tr class="border-b border-slate-50 hover:bg-slate-50 transition-colors">
    <td class="py-4 pl-4 pr-4 font-medium text-slate-800"><?php echo htmlspecialchars($r["project_name"]); ?></td>
@@ -204,6 +301,7 @@ $cronCommand = "php " . str_replace("\\", "/", __DIR__) . "/handlers/run_monitor
    </td>
    <td class="py-4 pr-4 text-xs text-slate-500">
      <div class="mb-2"><span data-health-state="<?php echo htmlspecialchars($freshness["state"]); ?>" title="<?php echo htmlspecialchars($freshness["message"]); ?>" class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset <?php echo monitoringHealthBadgeClass($freshness["state"]); ?>"><?php echo htmlspecialchars($freshness["label"]); ?></span></div>
+     <div class="mb-2"><span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset <?php echo monitoringHealthScoreBadgeClass($healthScore["state"]); ?>">Score <?php echo (int) $healthScore["score"]; ?> · <?php echo htmlspecialchars($healthScore["label"]); ?></span></div>
      <div><span data-status-response-time><?php echo $r["response_time_ms"] ? htmlspecialchars($r["response_time_ms"] . " ms") : "—"; ?></span> · <span data-status-source><?php echo htmlspecialchars($r["status_source"] ?? "—"); ?></span></div>
      <div>Last OK: <span data-last-successful-check><?php echo htmlspecialchars(formatNucleusDateTime($r["last_successful_check"])); ?></span></div>
      <div>Failures: <span data-consecutive-failures><?php echo (int) ($r["consecutive_failures"] ?? 0); ?></span></div>

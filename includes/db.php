@@ -1,26 +1,41 @@
 <?php
-// Database connection using config.php constants
 require_once __DIR__ . "/../config.php";
 
-$host = DB_HOST;
-$db   = DB_NAME;
-$user = DB_USER;
-$pass = DB_PASS;
-$charset = "utf8mb4";
+function getDbConnection(): PDO
+{
+    static $connection = null;
+    if ($connection instanceof PDO) {
+        return $connection;
+    }
 
-$dsn = "mysql:host=$host;dbname=$db;charset=$charset";
+    if (DB_CONNECTION !== "mysql") {
+        throw new RuntimeException("Unsupported database connection: " . DB_CONNECTION);
+    }
 
-$options = [
-    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-    PDO::ATTR_EMULATE_PREPARES => false,
-];
+    $dsn = sprintf(
+        "mysql:host=%s;port=%d;dbname=%s;charset=%s",
+        DB_HOST,
+        DB_PORT,
+        DB_DATABASE,
+        DB_CHARSET
+    );
+
+    $options = [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_EMULATE_PREPARES => false,
+    ];
+
+    $connection = new PDO($dsn, DB_USERNAME, DB_PASSWORD, $options);
+    return $connection;
+}
 
 try {
-    $pdo = new PDO($dsn, $user, $pass, $options);
-} catch (PDOException $e) {
-    // Log error (in production, log to file instead of showing)
+    $pdo = getDbConnection();
+} catch (Throwable $e) {
+    if (defined("NUCLEUS_DB_THROW_ON_FAILURE") && NUCLEUS_DB_THROW_ON_FAILURE) {
+        throw new RuntimeException($e->getMessage());
+    }
     error_log("DB connection failed: " . $e->getMessage());
     die("Database connection failed. Please try again later.");
 }
-?>
